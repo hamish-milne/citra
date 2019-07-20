@@ -89,6 +89,8 @@ OpenGLState::OpenGLState() {
     viewport.height = 0;
 
     clip_distance = {};
+
+    default_texture = 0;
 }
 
 void OpenGLState::Apply() const {
@@ -207,7 +209,11 @@ void OpenGLState::Apply() const {
     for (unsigned i = 0; i < ARRAY_SIZE(texture_units); ++i) {
         if (texture_units[i].texture_2d != cur_state.texture_units[i].texture_2d) {
             glActiveTexture(TextureUnits::PicaTexture(i).Enum());
-            glBindTexture(GL_TEXTURE_2D, texture_units[i].texture_2d);
+            if (texture_units[i].texture_2d == 0) {
+                glBindTexture(GL_TEXTURE_2D, default_texture);
+            } else {
+                glBindTexture(GL_TEXTURE_2D, texture_units[i].texture_2d);
+            }
         }
         if (texture_units[i].sampler != cur_state.texture_units[i].sampler) {
             glBindSampler(i, texture_units[i].sampler);

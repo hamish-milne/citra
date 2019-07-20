@@ -65,6 +65,14 @@ RasterizerOpenGL::RasterizerOpenGL(Frontend::EmuWindow& window)
     // Clipping plane 0 is always enabled for PICA fixed clip plane z <= 0
     state.clip_distance[0] = true;
 
+    // Create a 1x1 clear texture to use in the NULL case,
+    // instead of OpenGL's default of solid black
+    glGenTextures(1, &state.default_texture);
+    glBindTexture(GL_TEXTURE_2D, state.default_texture);
+    // For some reason alpha 0 wraps around to 1.0, so use 1/255 instead
+    u8 framebuffer_data[4] = {0, 0, 0, 1};
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, framebuffer_data);
+
     // Create sampler objects
     for (std::size_t i = 0; i < texture_samplers.size(); ++i) {
         texture_samplers[i].Create();

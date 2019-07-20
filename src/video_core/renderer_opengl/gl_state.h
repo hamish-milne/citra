@@ -144,6 +144,8 @@ public:
 
     std::array<bool, 2> clip_distance; // GL_CLIP_DISTANCE
 
+    GLuint default_texture;
+
     OpenGLState();
 
     /// Get the currently active OpenGL state
