@@ -14,6 +14,9 @@ namespace Pica::Rasterizer {
 using TevStageConfig = TexturingRegs::TevStageConfig;
 
 int GetWrappedTexCoord(TexturingRegs::TextureConfig::WrapMode mode, int val, unsigned size) {
+    if (size == 0) {
+        return 0;
+    }
     switch (mode) {
     case TexturingRegs::TextureConfig::ClampToEdge2:
         // For negative coordinate, ClampToEdge2 behaves the same as Repeat

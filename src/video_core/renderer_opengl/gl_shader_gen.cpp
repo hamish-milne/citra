@@ -843,9 +843,9 @@ static void WriteLighting(std::string& out, const PicaFSConfig& config) {
         // If enabled, compute distance attenuation value
         std::string dist_atten = "1.0";
         if (light_config.dist_atten_enable) {
-            std::string index = "clamp(" + light_src + ".dist_atten_scale * length(-view - " +
+            std::string index = "clamp(" + light_src + ".dist_atten_scale * 0.5 * length(-view - " +
                                 light_src + ".position) + " + light_src +
-                                ".dist_atten_bias, 0.0, 1.0)";
+                                ".dist_atten_bias, 0.0, 256.0)/256";
             auto sampler = LightingRegs::DistanceAttenuationSampler(light_config.num);
             dist_atten = "LookupLightingLUTUnsigned(" +
                          std::to_string(static_cast<unsigned>(sampler)) + "," + index + ")";

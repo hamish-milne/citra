@@ -92,15 +92,16 @@ std::tuple<Common::Vec4<u8>, Common::Vec4<u8>> ComputeFragmentsColors(
         if (!lighting.IsDistAttenDisabled(num)) {
             auto distance = (-view - position).Length();
             float scale = Pica::float20::FromRaw(light_config.dist_atten_scale).ToFloat32();
+            scale *= 0.5; // Fudge factor
             float bias = Pica::float20::FromRaw(light_config.dist_atten_bias).ToFloat32();
             std::size_t lut =
                 static_cast<std::size_t>(LightingRegs::LightingSampler::DistanceAttenuation) + num;
 
-            float sample_loc = std::clamp(scale * distance + bias, 0.0f, 1.0f);
+            float sample_loc = scale * distance + bias;
 
             u8 lutindex =
-                static_cast<u8>(std::clamp(std::floor(sample_loc * 256.0f), 0.0f, 255.0f));
-            float delta = sample_loc * 256 - lutindex;
+                static_cast<u8>(std::clamp(std::floor(sample_loc), 0.0f, 255.0f));
+            float delta = sample_loc - lutindex;
             dist_atten = LookupLightingLut(lighting_state, lut, lutindex, delta);
         }
 

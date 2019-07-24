@@ -58,6 +58,10 @@ size_t CalculateTileSize(TextureFormat format) {
 
 Common::Vec4<u8> LookupTexture(const u8* source, unsigned int x, unsigned int y,
                                const TextureInfo& info, bool disable_alpha) {
+    if (source == nullptr) {
+        return {0, 0, 0, 0};
+    }
+
     // Coordinate in tiles
     const unsigned int coarse_x = x / 8;
     const unsigned int coarse_y = y / 8;
