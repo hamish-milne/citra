@@ -15,12 +15,13 @@
 #include "core/hle/kernel/process.h"
 #include "core/hle/lock.h"
 #include "core/memory.h"
+#include "core/savestate/state_manager.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 
 namespace Memory {
 
-class RasterizerCacheMarker {
+class RasterizerCacheMarker : Core::StateSource {
 public:
     void Mark(VAddr addr, bool cached) {
         bool* p = At(addr);
@@ -33,6 +34,18 @@ public:
         if (p)
             return *p;
         return false;
+    }
+
+    const Core::SectionId Name() const { return {"RACM"}; }
+    void Serialize(std::ostream &stream) const
+    {
+        Core::Write(stream, vram);
+        Core::Write(stream, linear_heap);
+        Core::Write(stream, new_linear_heap);
+    }
+    void Deserialize(std::istream &stream)
+    {
+
     }
 
 private:
@@ -54,8 +67,17 @@ private:
     std::array<bool, NEW_LINEAR_HEAP_SIZE / PAGE_SIZE> new_linear_heap{};
 };
 
-class MemorySystem::Impl {
+class MemorySystem::Impl : Core::StateSource {
 public:
+    const Core::SectionId Name() const { return {"MMEM"}; }
+    void Serialize(std::ostream &stream) const
+    {
+        Core::Write(stream, vram.get(), Memory::VRAM_SIZE);
+        Core::Write(stream, n3ds_extra_ram.get(), Memory::N3DS_EXTRA_RAM_SIZE);
+        Core::Write(stream, fcram.get(), Memory::FCRAM_N3DS_SIZE);
+    }
+    void Deserialize(std::istream &stream) = 0;
+
     // Visual Studio would try to allocate these on compile time if they are std::array, which would
     // exceed the memory limit.
     std::unique_ptr<u8[]> fcram = std::make_unique<u8[]>(Memory::FCRAM_N3DS_SIZE);

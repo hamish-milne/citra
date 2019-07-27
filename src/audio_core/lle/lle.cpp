@@ -402,7 +402,7 @@ void DspLle::PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer) {
     impl->WritePipe(static_cast<u8>(pipe_number), buffer);
 }
 
-std::array<u8, Memory::DSP_RAM_SIZE>& DspLle::GetDspMemory() {
+std::array<u8, Memory::DSP_RAM_SIZE>& DspLle::GetDspMemory() const {
     return impl->teakra.GetDspMemory();
 }
 

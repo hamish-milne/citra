@@ -11,10 +11,12 @@
 
 namespace Core {
 
+using SectionId = std::array<char, 5>;
+
 class StateSource
 {
 public:
-    virtual std::array<char, 4> Name() const = 0;
+    virtual const SectionId Name() const = 0;
     virtual void Serialize(std::ostream &stream) const = 0;
     virtual void Deserialize(std::istream &stream) = 0;
 };
@@ -27,7 +29,19 @@ public:
     void Load(std::istream &stream);
 
 private:
-    std::set<StateSource&> sources {};
+    std::set<StateSource*> sources {};
 };
+
+template<typename T>
+static void Write(std::ostream &stream, T sequence)
+{
+    stream.write(reinterpret_cast<const char*>(sequence.data()), sequence.size() * sizeof(T::value_type));
+}
+
+template<typename T>
+static void Write(std::ostream &stream, T *sequence, u32 size)
+{
+    stream.write(reinterpret_cast<const char*>(sequence), sizeof(T) * size);
+}
 
 }

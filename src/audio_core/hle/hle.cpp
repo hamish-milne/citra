@@ -262,7 +262,7 @@ void DspHle::Impl::PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer)
     }
 }
 
-std::array<u8, Memory::DSP_RAM_SIZE>& DspHle::Impl::GetDspMemory() {
+std::array<u8, Memory::DSP_RAM_SIZE>& DspHle::Impl::GetDspMemory() const {
     return dsp_memory.raw_memory;
 }
 

@@ -7,6 +7,7 @@
 #include <array>
 #include <memory>
 #include "core/hle/service/service.h"
+#include "core/savestate/state_manager.h"
 
 namespace Core {
 class System;
@@ -140,6 +141,17 @@ public:
     protected:
         std::shared_ptr<Module> ac;
     };
+
+    // Save/load
+    const Core::SectionId Name() const { return {"AC--"}; }
+    void Serialize(std::ostream &stream) const
+    {
+        Core::Write(stream, default_config.data);
+    }
+    void Deserialize(std::istream &stream)
+    {
+
+    }
 
 protected:
     struct ACConfig {

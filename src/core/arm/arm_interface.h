@@ -9,9 +9,10 @@
 #include "common/common_types.h"
 #include "core/arm/skyeye_common/arm_regformat.h"
 #include "core/arm/skyeye_common/vfp/asm_vfp.h"
+#include "core/savestate/state_manager.h"
 
 /// Generic ARM11 CPU interface
-class ARM_Interface : NonCopyable {
+class ARM_Interface : NonCopyable, Core::StateSource {
 public:
     virtual ~ARM_Interface() {}
 
@@ -172,4 +173,15 @@ public:
 
     /// Prepare core for thread reschedule (if needed to correctly handle state)
     virtual void PrepareReschedule() = 0;
+
+    // Save/load
+    const Core::SectionId Name() const { return {"CPU-"}; }
+    void Serialize(std::ostream &stream) const
+    {
+
+    }
+    void Deserialize(std::istream &stream)
+    {
+
+    }
 };

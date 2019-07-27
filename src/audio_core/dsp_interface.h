@@ -11,6 +11,7 @@
 #include "common/common_types.h"
 #include "common/ring_buffer.h"
 #include "core/memory.h"
+#include "core/savestate/state_manager.h"
 
 namespace Service::DSP {
 class DSP_DSP;
@@ -20,7 +21,7 @@ namespace AudioCore {
 
 class Sink;
 
-class DspInterface {
+class DspInterface : Core::StateSource {
 public:
     DspInterface();
     virtual ~DspInterface();
@@ -81,7 +82,7 @@ public:
     virtual void PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer) = 0;
 
     /// Returns a reference to the array backing DSP memory
-    virtual std::array<u8, Memory::DSP_RAM_SIZE>& GetDspMemory() = 0;
+    virtual std::array<u8, Memory::DSP_RAM_SIZE>& GetDspMemory() const = 0;
 
     /// Sets the dsp class that we trigger interrupts for
     virtual void SetServiceToInterrupt(std::weak_ptr<Service::DSP::DSP_DSP> dsp) = 0;
@@ -98,6 +99,17 @@ public:
     Sink& GetSink();
     /// Enable/Disable audio stretching.
     void EnableStretching(bool enable);
+
+    // Save/load
+    const Core::SectionId Name() const { return {"DSP-"}; }
+    void Serialize(std::ostream &stream) const
+    {
+        Core::Write(stream, GetDspMemory());
+    }
+    void Deserialize(std::istream &stream)
+    {
+
+    }
 
 protected:
     void OutputFrame(StereoFrame16& frame);
