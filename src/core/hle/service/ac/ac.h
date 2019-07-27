@@ -8,6 +8,7 @@
 #include <memory>
 #include "core/hle/service/service.h"
 #include "core/savestate/state_manager.h"
+#include "core/savestate/binary_rw.h"
 
 namespace Core {
 class System;
@@ -143,14 +144,16 @@ public:
     };
 
     // Save/load
-    const Core::SectionId Name() const { return {"AC--"}; }
+    const SaveState::SectionId Name() const { return {"AC--"}; }
     void Serialize(std::ostream &stream) const
     {
-        Core::Write(stream, default_config.data);
+        auto writer = SaveState::BinaryWriter{stream};
+        writer.Write(default_config.data);
     }
     void Deserialize(std::istream &stream)
     {
-
+        auto reader = SaveState::BinaryReader{stream};
+        reader.Read(default_config.data);
     }
 
 protected:

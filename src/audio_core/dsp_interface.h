@@ -12,6 +12,7 @@
 #include "common/ring_buffer.h"
 #include "core/memory.h"
 #include "core/savestate/state_manager.h"
+#include "core/savestate/binary_rw.h"
 
 namespace Service::DSP {
 class DSP_DSP;
@@ -21,7 +22,7 @@ namespace AudioCore {
 
 class Sink;
 
-class DspInterface : Core::StateSource {
+class DspInterface : SaveState::StateSource {
 public:
     DspInterface();
     virtual ~DspInterface();
@@ -82,7 +83,8 @@ public:
     virtual void PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer) = 0;
 
     /// Returns a reference to the array backing DSP memory
-    virtual std::array<u8, Memory::DSP_RAM_SIZE>& GetDspMemory() const = 0;
+    virtual std::array<u8, Memory::DSP_RAM_SIZE>& GetDspMemory() = 0;
+    virtual const std::array<u8, Memory::DSP_RAM_SIZE>& GetDspMemory() const = 0;
 
     /// Sets the dsp class that we trigger interrupts for
     virtual void SetServiceToInterrupt(std::weak_ptr<Service::DSP::DSP_DSP> dsp) = 0;
@@ -101,14 +103,16 @@ public:
     void EnableStretching(bool enable);
 
     // Save/load
-    const Core::SectionId Name() const { return {"DSP-"}; }
+    const SaveState::SectionId Name() const { return {"DSP-"}; }
     void Serialize(std::ostream &stream) const
     {
-        Core::Write(stream, GetDspMemory());
+        auto writer = SaveState::BinaryWriter{stream};
+        writer.Write(GetDspMemory());
     }
     void Deserialize(std::istream &stream)
     {
-
+        auto reader = SaveState::BinaryReader{stream};
+        reader.Read(GetDspMemory());
     }
 
 protected:

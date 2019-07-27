@@ -9,7 +9,7 @@
 #include <array>
 #include "common/common_types.h"
 
-namespace Core {
+namespace SaveState {
 
 using SectionId = std::array<char, 5>;
 
@@ -31,17 +31,5 @@ public:
 private:
     std::set<StateSource*> sources {};
 };
-
-template<typename T>
-static void Write(std::ostream &stream, T sequence)
-{
-    stream.write(reinterpret_cast<const char*>(sequence.data()), sequence.size() * sizeof(T::value_type));
-}
-
-template<typename T>
-static void Write(std::ostream &stream, T *sequence, u32 size)
-{
-    stream.write(reinterpret_cast<const char*>(sequence), sizeof(T) * size);
-}
 
 }

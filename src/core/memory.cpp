@@ -16,12 +16,13 @@
 #include "core/hle/lock.h"
 #include "core/memory.h"
 #include "core/savestate/state_manager.h"
+#include "core/savestate/binary_rw.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 
 namespace Memory {
 
-class RasterizerCacheMarker : Core::StateSource {
+class RasterizerCacheMarker : SaveState::StateSource {
 public:
     void Mark(VAddr addr, bool cached) {
         bool* p = At(addr);
@@ -36,16 +37,21 @@ public:
         return false;
     }
 
-    const Core::SectionId Name() const { return {"RACM"}; }
+    const SaveState::SectionId Name() const { return {"RACM"}; }
     void Serialize(std::ostream &stream) const
     {
-        Core::Write(stream, vram);
-        Core::Write(stream, linear_heap);
-        Core::Write(stream, new_linear_heap);
+        // TODO: More efficient bool serialization?
+        auto writer = SaveState::BinaryWriter{stream};
+        writer.Write(vram);
+        writer.Write(linear_heap);
+        writer.Write(new_linear_heap);
     }
     void Deserialize(std::istream &stream)
     {
-
+        auto reader = SaveState::BinaryReader{stream};
+        reader.Read(vram);
+        reader.Read(linear_heap);
+        reader.Read(new_linear_heap);
     }
 
 private:
@@ -67,16 +73,23 @@ private:
     std::array<bool, NEW_LINEAR_HEAP_SIZE / PAGE_SIZE> new_linear_heap{};
 };
 
-class MemorySystem::Impl : Core::StateSource {
+class MemorySystem::Impl : SaveState::StateSource {
 public:
-    const Core::SectionId Name() const { return {"MMEM"}; }
+    const SaveState::SectionId Name() const { return {"MEM-"}; }
     void Serialize(std::ostream &stream) const
     {
-        Core::Write(stream, vram.get(), Memory::VRAM_SIZE);
-        Core::Write(stream, n3ds_extra_ram.get(), Memory::N3DS_EXTRA_RAM_SIZE);
-        Core::Write(stream, fcram.get(), Memory::FCRAM_N3DS_SIZE);
+        auto writer = SaveState::BinaryWriter{stream};
+        writer.Write(vram.get(), Memory::VRAM_SIZE);
+        writer.Write(n3ds_extra_ram.get(), Memory::N3DS_EXTRA_RAM_SIZE);
+        writer.Write(fcram.get(), Memory::FCRAM_N3DS_SIZE);
     }
-    void Deserialize(std::istream &stream) = 0;
+    void Deserialize(std::istream &stream)
+    {
+        auto reader = SaveState::BinaryReader{stream};
+        reader.Read(vram.get(), Memory::VRAM_SIZE);
+        reader.Read(n3ds_extra_ram.get(), Memory::N3DS_EXTRA_RAM_SIZE);
+        reader.Read(fcram.get(), Memory::FCRAM_N3DS_SIZE);
+    }
 
     // Visual Studio would try to allocate these on compile time if they are std::array, which would
     // exceed the memory limit.

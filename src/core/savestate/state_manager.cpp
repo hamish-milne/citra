@@ -7,7 +7,7 @@
 #include <algorithm>
 #include "state_manager.h"
 
-namespace Core {
+namespace SaveState {
 
 void StateManager::RegisterSource(StateSource &source)
 {

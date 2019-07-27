@@ -15,6 +15,7 @@
 #include "core/hle/kernel/mutex.h"
 #include "core/hle/result.h"
 #include "core/hle/service/service.h"
+#include "core/savestate/state_manager.h"
 
 namespace Core {
 class System;
@@ -147,7 +148,7 @@ std::string GetTitlePath(Service::FS::MediaType media_type, u64 tid);
  */
 std::string GetMediaTitlePath(Service::FS::MediaType media_type);
 
-class Module final {
+class Module final : SaveState::StateSource {
 public:
     explicit Module(Core::System& system);
     ~Module();
@@ -572,6 +573,10 @@ private:
      * Scans all storage mediums for titles for listing.
      */
     void ScanForAllTitles();
+
+    const SaveState::SectionId Name() const ;
+    void Serialize(std::ostream &stream) const;
+    void Deserialize(std::istream &stream);
 
     Core::System& system;
     bool cia_installing = false;

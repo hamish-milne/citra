@@ -42,6 +42,7 @@ public:
     std::size_t GetPipeReadableSize(DspPipe pipe_number) const;
     void PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer);
 
+    const std::array<u8, Memory::DSP_RAM_SIZE>& GetDspMemory() const;
     std::array<u8, Memory::DSP_RAM_SIZE>& GetDspMemory();
 
     void SetServiceToInterrupt(std::weak_ptr<DSP_DSP> dsp);
@@ -262,7 +263,11 @@ void DspHle::Impl::PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer)
     }
 }
 
-std::array<u8, Memory::DSP_RAM_SIZE>& DspHle::Impl::GetDspMemory() const {
+std::array<u8, Memory::DSP_RAM_SIZE>& DspHle::Impl::GetDspMemory() {
+    return dsp_memory.raw_memory;
+}
+
+const std::array<u8, Memory::DSP_RAM_SIZE>& DspHle::Impl::GetDspMemory() const {
     return dsp_memory.raw_memory;
 }
 
@@ -432,6 +437,10 @@ void DspHle::PipeWrite(DspPipe pipe_number, const std::vector<u8>& buffer) {
 }
 
 std::array<u8, Memory::DSP_RAM_SIZE>& DspHle::GetDspMemory() {
+    return impl->GetDspMemory();
+}
+
+const std::array<u8, Memory::DSP_RAM_SIZE>& DspHle::GetDspMemory() const {
     return impl->GetDspMemory();
 }
 

@@ -235,7 +235,7 @@ void ARM_Dynarmic::SetCPSR(u32 cpsr) {
     jit->SetCpsr(cpsr);
 }
 
-u32 ARM_Dynarmic::GetCP15Register(CP15Register reg) {
+u32 ARM_Dynarmic::GetCP15Register(CP15Register reg) const {
     return interpreter_state->CP15[reg];
 }
 
@@ -247,7 +247,7 @@ std::unique_ptr<ARM_Interface::ThreadContext> ARM_Dynarmic::NewContext() const {
     return std::make_unique<DynarmicThreadContext>();
 }
 
-void ARM_Dynarmic::SaveContext(const std::unique_ptr<ThreadContext>& arg) {
+void ARM_Dynarmic::SaveContext(const std::unique_ptr<ThreadContext>& arg) const {
     DynarmicThreadContext* ctx = dynamic_cast<DynarmicThreadContext*>(arg.get());
     ASSERT(ctx);
 

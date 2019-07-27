@@ -138,7 +138,7 @@ void ARM_DynCom::SetCPSR(u32 cpsr) {
     state->Cpsr = cpsr;
 }
 
-u32 ARM_DynCom::GetCP15Register(CP15Register reg) {
+u32 ARM_DynCom::GetCP15Register(CP15Register reg) const {
     return state->CP15[reg];
 }
 
@@ -159,7 +159,7 @@ std::unique_ptr<ARM_Interface::ThreadContext> ARM_DynCom::NewContext() const {
     return std::make_unique<DynComThreadContext>();
 }
 
-void ARM_DynCom::SaveContext(const std::unique_ptr<ThreadContext>& arg) {
+void ARM_DynCom::SaveContext(const std::unique_ptr<ThreadContext>& arg) const {
     DynComThreadContext* ctx = dynamic_cast<DynComThreadContext*>(arg.get());
     ASSERT(ctx);
 

@@ -12,7 +12,7 @@
 #include "core/savestate/state_manager.h"
 
 /// Generic ARM11 CPU interface
-class ARM_Interface : NonCopyable, Core::StateSource {
+class ARM_Interface : NonCopyable, SaveState::StateSource {
 public:
     virtual ~ARM_Interface() {}
 
@@ -144,7 +144,7 @@ public:
      * @param reg The CP15 register to retrieve the value from.
      * @return the value stored in the given CP15 register.
      */
-    virtual u32 GetCP15Register(CP15Register reg) = 0;
+    virtual u32 GetCP15Register(CP15Register reg) const = 0;
 
     /**
      * Stores the given value into the indicated CP15 register.
@@ -163,7 +163,7 @@ public:
      * Saves the current CPU context
      * @param ctx Thread context to save
      */
-    virtual void SaveContext(const std::unique_ptr<ThreadContext>& ctx) = 0;
+    virtual void SaveContext(const std::unique_ptr<ThreadContext>& ctx) const = 0;
 
     /**
      * Loads a CPU context
@@ -175,13 +175,7 @@ public:
     virtual void PrepareReschedule() = 0;
 
     // Save/load
-    const Core::SectionId Name() const { return {"CPU-"}; }
-    void Serialize(std::ostream &stream) const
-    {
-
-    }
-    void Deserialize(std::istream &stream)
-    {
-
-    }
+    const SaveState::SectionId Name() const override;
+    void Serialize(std::ostream &stream) const override;
+    void Deserialize(std::istream &stream) override;
 };

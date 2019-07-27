@@ -3,6 +3,7 @@ add_library(core STATIC
     announce_multiplayer_session.cpp
     announce_multiplayer_session.h
     arm/arm_interface.h
+    arm/arm_interface.cpp
     arm/dyncom/arm_dyncom.cpp
     arm/dyncom/arm_dyncom.h
     arm/dyncom/arm_dyncom_dec.cpp

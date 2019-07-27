@@ -32,6 +32,7 @@
 #include "core/hle/service/fs/archive.h"
 #include "core/loader/loader.h"
 #include "core/loader/smdh.h"
+#include "core/savestate/binary_rw.h"
 
 namespace Service::AM {
 
@@ -1448,6 +1449,18 @@ void Module::Interface::GetMetaDataFromCia(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 2);
     rb.Push(RESULT_SUCCESS);
     rb.PushMappedBuffer(output_buffer);
+}
+
+const SaveState::SectionId Module::Name() const { return {"AM--"}; }
+void Module::Serialize(std::ostream &stream) const
+{
+    auto writer = SaveState::BinaryWriter{stream};
+    writer.Write(am_title_list);
+}
+void Module::Deserialize(std::istream &stream)
+{
+    auto reader = SaveState::BinaryReader{stream};
+    reader.Read(am_title_list);
 }
 
 Module::Module(Core::System& system) : system(system) {
