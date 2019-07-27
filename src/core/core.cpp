@@ -189,6 +189,7 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window, u32 system_mo
     } else {
         cpu_core = std::make_shared<ARM_DynCom>(this, *memory, USER32MODE);
     }
+    state_manager->RegisterSource(cpu_core);
 
     kernel->SetCPU(cpu_core);
 

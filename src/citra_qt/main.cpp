@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <clocale>
+#include <fstream>
 #include <memory>
 #include <thread>
 #include <glad/glad.h>
@@ -540,6 +541,8 @@ void GMainWindow::ConnectMenuEvents() {
             &GMainWindow::OnMenuReportCompatibility);
     connect(ui.action_Configure, &QAction::triggered, this, &GMainWindow::OnConfigure);
     connect(ui.action_Cheats, &QAction::triggered, this, &GMainWindow::OnCheats);
+    connect(ui.action_Save, &QAction::triggered, this, &GMainWindow::OnSave);
+    connect(ui.action_Load, &QAction::triggered, this, &GMainWindow::OnLoad);
 
     // View
     connect(ui.action_Single_Window_Mode, &QAction::triggered, this,
@@ -899,6 +902,8 @@ void GMainWindow::ShutdownGame() {
     ui.action_Stop->setEnabled(false);
     ui.action_Restart->setEnabled(false);
     ui.action_Cheats->setEnabled(false);
+    ui.action_Save->setEnabled(false);
+    ui.action_Load->setEnabled(false);
     ui.action_Load_Amiibo->setEnabled(false);
     ui.action_Remove_Amiibo->setEnabled(false);
     ui.action_Report_Compatibility->setEnabled(false);
@@ -1194,6 +1199,8 @@ void GMainWindow::OnStartGame() {
     ui.action_Stop->setEnabled(true);
     ui.action_Restart->setEnabled(true);
     ui.action_Cheats->setEnabled(true);
+    ui.action_Save->setEnabled(true);
+    ui.action_Load->setEnabled(true);
     ui.action_Load_Amiibo->setEnabled(true);
     ui.action_Report_Compatibility->setEnabled(true);
     ui.action_Enable_Frame_Advancing->setEnabled(true);
@@ -1334,6 +1341,24 @@ void GMainWindow::OnSwapScreens() {
 void GMainWindow::OnCheats() {
     CheatDialog cheat_dialog(this);
     cheat_dialog.exec();
+}
+
+void GMainWindow::OnSave() {
+    Core::System& system{Core::System::GetInstance()};
+    auto fs = std::ofstream("save0.citrasave");
+    emu_thread->SetRunning(false);
+    system.StateManager().Save(fs);
+    emu_thread->SetRunning(true);
+}
+
+void GMainWindow::OnLoad() {
+    Core::System& system{Core::System::GetInstance()};
+    if (QFileInfo("save0.citrasave").exists()) {
+        auto fs = std::ifstream("save0.citrasave");
+        emu_thread->SetRunning(false);
+        system.StateManager().Load(fs);
+        emu_thread->SetRunning(true);
+    }
 }
 
 void GMainWindow::OnConfigure() {

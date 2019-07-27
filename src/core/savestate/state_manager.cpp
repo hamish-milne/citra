@@ -58,7 +58,7 @@ void StateManager::Load(std::istream &stream)
             }
         }
         if (source == nullptr) {
-            // Log error - missing section
+            throw "Missing source";
             stream.seekg(length, +1);
             continue;
         }

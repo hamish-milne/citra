@@ -12,7 +12,7 @@
 #include "core/savestate/state_manager.h"
 
 /// Generic ARM11 CPU interface
-class ARM_Interface : NonCopyable, SaveState::StateSource {
+class ARM_Interface : NonCopyable, public SaveState::StateSource {
 public:
     virtual ~ARM_Interface() {}
 
