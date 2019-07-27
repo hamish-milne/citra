@@ -169,7 +169,10 @@ void System::Reschedule() {
 System::ResultStatus System::Init(Frontend::EmuWindow& emu_window, u32 system_mode) {
     LOG_DEBUG(HW_Memory, "initialized OK");
 
+    state_manager = std::make_unique<SaveState::StateManager>();
+
     memory = std::make_unique<Memory::MemorySystem>();
+    state_manager->RegisterSource(memory);
 
     timing = std::make_unique<Timing>();
 
@@ -223,6 +226,7 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window, u32 system_mo
     GetAndResetPerfStats();
     perf_stats.BeginSystemFrame();
 
+
     return ResultStatus::Success;
 }
 
@@ -272,6 +276,14 @@ Cheats::CheatEngine& System::CheatEngine() {
 
 const Cheats::CheatEngine& System::CheatEngine() const {
     return *cheat_engine;
+}
+
+SaveState::StateManager& System::StateManager() {
+    return *state_manager;
+}
+
+const SaveState::StateManager& System::StateManager() const {
+    return *state_manager;
 }
 
 void System::RegisterMiiSelector(std::shared_ptr<Frontend::MiiSelector> mii_selector) {

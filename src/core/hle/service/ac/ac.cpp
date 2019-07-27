@@ -15,6 +15,7 @@
 #include "core/hle/service/ac/ac_i.h"
 #include "core/hle/service/ac/ac_u.h"
 #include "core/memory.h"
+#include "core/savestate/binary_rw.h"
 
 namespace Service::AC {
 void Module::Interface::CreateDefaultConfig(Kernel::HLERequestContext& ctx) {
@@ -169,12 +170,25 @@ void Module::Interface::SetClientVersion(Kernel::HLERequestContext& ctx) {
     rb.Push(RESULT_SUCCESS);
 }
 
+const SaveState::SectionId Module::Name() const { return {"AC--"}; }
+void Module::Serialize(std::ostream &stream) const
+{
+    auto writer = SaveState::BinaryWriter{stream};
+    writer.Write(default_config.data);
+}
+void Module::Deserialize(std::istream &stream)
+{
+    auto reader = SaveState::BinaryReader{stream};
+    reader.Read(default_config.data);
+}
+
 Module::Interface::Interface(std::shared_ptr<Module> ac, const char* name, u32 max_session)
     : ServiceFramework(name, max_session), ac(std::move(ac)) {}
 
 void InstallInterfaces(Core::System& system) {
     auto& service_manager = system.ServiceManager();
     auto ac = std::make_shared<Module>();
+    system.StateManager().RegisterSource(ac);
     std::make_shared<AC_I>(ac)->InstallAsService(service_manager);
     std::make_shared<AC_U>(ac)->InstallAsService(service_manager);
 }

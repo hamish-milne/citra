@@ -12,6 +12,7 @@
 #include "core/loader/loader.h"
 #include "core/memory.h"
 #include "core/perf_stats.h"
+#include "core/savestate/state_manager.h"
 #include "core/telemetry_session.h"
 
 class ARM_Interface;
@@ -206,6 +207,9 @@ public:
     /// Gets a const reference to the cheat engine
     const Cheats::CheatEngine& CheatEngine() const;
 
+    SaveState::StateManager& StateManager();
+    const SaveState::StateManager& StateManager() const;
+
     PerfStats perf_stats;
     FrameLimiter frame_limiter;
 
@@ -281,9 +285,10 @@ private:
 
     std::unique_ptr<Service::FS::ArchiveManager> archive_manager;
 
-    std::unique_ptr<Memory::MemorySystem> memory;
+    std::shared_ptr<Memory::MemorySystem> memory;
     std::unique_ptr<Kernel::KernelSystem> kernel;
     std::unique_ptr<Timing> timing;
+    std::unique_ptr<SaveState::StateManager> state_manager;
 
 private:
     static System s_instance;

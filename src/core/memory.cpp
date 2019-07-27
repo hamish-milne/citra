@@ -22,7 +22,7 @@
 
 namespace Memory {
 
-class RasterizerCacheMarker : SaveState::StateSource {
+class RasterizerCacheMarker {
 public:
     void Mark(VAddr addr, bool cached) {
         bool* p = At(addr);
@@ -37,24 +37,6 @@ public:
         return false;
     }
 
-    const SaveState::SectionId Name() const { return {"RACM"}; }
-    void Serialize(std::ostream &stream) const
-    {
-        // TODO: More efficient bool serialization?
-        auto writer = SaveState::BinaryWriter{stream};
-        writer.Write(vram);
-        writer.Write(linear_heap);
-        writer.Write(new_linear_heap);
-    }
-    void Deserialize(std::istream &stream)
-    {
-        auto reader = SaveState::BinaryReader{stream};
-        reader.Read(vram);
-        reader.Read(linear_heap);
-        reader.Read(new_linear_heap);
-    }
-
-private:
     bool* At(VAddr addr) {
         if (addr >= VRAM_VADDR && addr < VRAM_VADDR_END) {
             return &vram[(addr - VRAM_VADDR) / PAGE_SIZE];
@@ -73,23 +55,8 @@ private:
     std::array<bool, NEW_LINEAR_HEAP_SIZE / PAGE_SIZE> new_linear_heap{};
 };
 
-class MemorySystem::Impl : SaveState::StateSource {
+class MemorySystem::Impl {
 public:
-    const SaveState::SectionId Name() const { return {"MEM-"}; }
-    void Serialize(std::ostream &stream) const
-    {
-        auto writer = SaveState::BinaryWriter{stream};
-        writer.Write(vram.get(), Memory::VRAM_SIZE);
-        writer.Write(n3ds_extra_ram.get(), Memory::N3DS_EXTRA_RAM_SIZE);
-        writer.Write(fcram.get(), Memory::FCRAM_N3DS_SIZE);
-    }
-    void Deserialize(std::istream &stream)
-    {
-        auto reader = SaveState::BinaryReader{stream};
-        reader.Read(vram.get(), Memory::VRAM_SIZE);
-        reader.Read(n3ds_extra_ram.get(), Memory::N3DS_EXTRA_RAM_SIZE);
-        reader.Read(fcram.get(), Memory::FCRAM_N3DS_SIZE);
-    }
 
     // Visual Studio would try to allocate these on compile time if they are std::array, which would
     // exceed the memory limit.
@@ -106,6 +73,32 @@ public:
 
 MemorySystem::MemorySystem() : impl(std::make_unique<Impl>()) {}
 MemorySystem::~MemorySystem() = default;
+
+const SaveState::SectionId MemorySystem::Name() const { return {"MEM-"}; }
+
+void MemorySystem::Serialize(std::ostream &stream) const
+{
+    auto writer = SaveState::BinaryWriter{stream};
+    writer.Write(impl->vram.get(), Memory::VRAM_SIZE);
+    writer.Write(impl->n3ds_extra_ram.get(), Memory::N3DS_EXTRA_RAM_SIZE);
+    writer.Write(impl->fcram.get(), Memory::FCRAM_N3DS_SIZE);
+    writer.Write(impl->cache_marker.vram);
+    writer.Write(impl->cache_marker.linear_heap);
+    writer.Write(impl->cache_marker.new_linear_heap);
+    writer.Write(impl->dsp->GetDspMemory());
+}
+
+void MemorySystem::Deserialize(std::istream &stream)
+{
+    auto reader = SaveState::BinaryReader{stream};
+    reader.Read(impl->vram.get(), Memory::VRAM_SIZE);
+    reader.Read(impl->n3ds_extra_ram.get(), Memory::N3DS_EXTRA_RAM_SIZE);
+    reader.Read(impl->fcram.get(), Memory::FCRAM_N3DS_SIZE);
+    reader.Read(impl->cache_marker.vram);
+    reader.Read(impl->cache_marker.linear_heap);
+    reader.Read(impl->cache_marker.new_linear_heap);
+    reader.Read(impl->dsp->GetDspMemory());
+}
 
 void MemorySystem::SetCurrentPageTable(PageTable* page_table) {
     impl->current_page_table = page_table;

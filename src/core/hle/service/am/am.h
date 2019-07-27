@@ -148,7 +148,7 @@ std::string GetTitlePath(Service::FS::MediaType media_type, u64 tid);
  */
 std::string GetMediaTitlePath(Service::FS::MediaType media_type);
 
-class Module final : SaveState::StateSource {
+class Module final : public SaveState::StateSource {
 public:
     explicit Module(Core::System& system);
     ~Module();
@@ -574,9 +574,9 @@ private:
      */
     void ScanForAllTitles();
 
-    const SaveState::SectionId Name() const ;
-    void Serialize(std::ostream &stream) const;
-    void Deserialize(std::istream &stream);
+    const SaveState::SectionId Name() const override;
+    void Serialize(std::ostream &stream) const override;
+    void Deserialize(std::istream &stream) override;
 
     Core::System& system;
     bool cia_installing = false;

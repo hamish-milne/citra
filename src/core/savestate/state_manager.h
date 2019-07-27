@@ -4,9 +4,10 @@
 
 #pragma once
 
-#include <iostream>
-#include <set>
 #include <array>
+#include <iostream>
+#include <memory>
+#include <set>
 #include "common/common_types.h"
 
 namespace SaveState {
@@ -24,12 +25,15 @@ public:
 class StateManager
 {
 public:
-    void RegisterSource(StateSource &source);
+    StateManager();
+    ~StateManager();
+    void RegisterSource(std::shared_ptr<StateSource> source);
     void Save(std::ostream &stream);
     void Load(std::istream &stream);
 
 private:
-    std::set<StateSource*> sources {};
+    class Impl;
+    std::unique_ptr<Impl> impl;
 };
 
 }

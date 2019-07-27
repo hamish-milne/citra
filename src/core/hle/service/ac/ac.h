@@ -8,7 +8,6 @@
 #include <memory>
 #include "core/hle/service/service.h"
 #include "core/savestate/state_manager.h"
-#include "core/savestate/binary_rw.h"
 
 namespace Core {
 class System;
@@ -19,7 +18,7 @@ class Event;
 }
 
 namespace Service::AC {
-class Module final {
+class Module final : public SaveState::StateSource {
 public:
     class Interface : public ServiceFramework<Interface> {
     public:
@@ -143,18 +142,9 @@ public:
         std::shared_ptr<Module> ac;
     };
 
-    // Save/load
-    const SaveState::SectionId Name() const { return {"AC--"}; }
-    void Serialize(std::ostream &stream) const
-    {
-        auto writer = SaveState::BinaryWriter{stream};
-        writer.Write(default_config.data);
-    }
-    void Deserialize(std::istream &stream)
-    {
-        auto reader = SaveState::BinaryReader{stream};
-        reader.Read(default_config.data);
-    }
+    const SaveState::SectionId Name() const override;
+    void Serialize(std::ostream &stream) const override;
+    void Deserialize(std::istream &stream) override;
 
 protected:
     struct ACConfig {

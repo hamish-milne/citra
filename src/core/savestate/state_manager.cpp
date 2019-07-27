@@ -9,14 +9,23 @@
 
 namespace SaveState {
 
-void StateManager::RegisterSource(StateSource &source)
+StateManager::StateManager() : impl(std::make_unique<Impl>()) {}
+StateManager::~StateManager() = default;
+
+class StateManager::Impl
 {
-    sources.insert(&source);
+public:
+    std::set<std::shared_ptr<StateSource>> sources {};
+};
+
+void StateManager::RegisterSource(std::shared_ptr<StateSource> source)
+{
+    impl->sources.insert(source);
 }
 
 void StateManager::Save(std::ostream &stream)
 {
-    for (auto &source : sources)
+    for (auto &source : impl->sources)
     {
         stream.write(source->Name().data(), source->Name().size()-1);
         auto lengthPos = stream.tellp();
@@ -40,8 +49,8 @@ void StateManager::Load(std::istream &stream)
         stream.read(name.data(), name.size()-1);
         u32 length {};
         stream.read(reinterpret_cast<char*>(&length), sizeof(length));
-        StateSource *source = nullptr;
-        for (auto s : sources)
+        std::shared_ptr<StateSource> source = nullptr;
+        for (auto s : impl->sources)
         {
             if (s->Name() == name) {
                 source = s;

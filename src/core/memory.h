@@ -11,6 +11,7 @@
 #include <vector>
 #include "common/common_types.h"
 #include "core/mmio.h"
+#include "core/savestate/state_manager.h"
 
 class ARM_Interface;
 
@@ -215,7 +216,7 @@ enum class FlushMode {
  */
 void RasterizerFlushVirtualRegion(VAddr start, u32 size, FlushMode mode);
 
-class MemorySystem {
+class MemorySystem : public SaveState::StateSource {
 public:
     MemorySystem();
     ~MemorySystem();
@@ -294,6 +295,10 @@ public:
     void UnregisterPageTable(PageTable* page_table);
 
     void SetDSP(AudioCore::DspInterface& dsp);
+
+    const SaveState::SectionId Name() const override;
+    void Serialize(std::ostream &stream) const override;
+    void Deserialize(std::istream &stream) override;
 
 private:
     template <typename T>

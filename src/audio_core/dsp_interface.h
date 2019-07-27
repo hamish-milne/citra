@@ -22,7 +22,7 @@ namespace AudioCore {
 
 class Sink;
 
-class DspInterface : SaveState::StateSource {
+class DspInterface {
 public:
     DspInterface();
     virtual ~DspInterface();
@@ -101,19 +101,6 @@ public:
     Sink& GetSink();
     /// Enable/Disable audio stretching.
     void EnableStretching(bool enable);
-
-    // Save/load
-    const SaveState::SectionId Name() const { return {"DSP-"}; }
-    void Serialize(std::ostream &stream) const
-    {
-        auto writer = SaveState::BinaryWriter{stream};
-        writer.Write(GetDspMemory());
-    }
-    void Deserialize(std::istream &stream)
-    {
-        auto reader = SaveState::BinaryReader{stream};
-        reader.Read(GetDspMemory());
-    }
 
 protected:
     void OutputFrame(StereoFrame16& frame);

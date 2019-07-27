@@ -1473,6 +1473,7 @@ Module::~Module() = default;
 void InstallInterfaces(Core::System& system) {
     auto& service_manager = system.ServiceManager();
     auto am = std::make_shared<Module>(system);
+    system.StateManager().RegisterSource(am);
     std::make_shared<AM_APP>(am)->InstallAsService(service_manager);
     std::make_shared<AM_NET>(am)->InstallAsService(service_manager);
     std::make_shared<AM_SYS>(am)->InstallAsService(service_manager);
