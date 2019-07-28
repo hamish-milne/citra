@@ -1,0 +1,76 @@
+☐ UI @started(19-07-28 09:30)
+	✔ Save/load actions @done(19-07-28 09:30)
+	☐ Notification
+	☐ Multiple states
+☐ Serialization @started(19-07-28 09:30)
+	✔ State manager @done(19-07-28 09:30)
+	✔ Binary reader/writer @done(19-07-28 09:30)
+	☐ Compression
+	☐ Stream barriers
+	☐ Exception handling
+☐ State sources
+	✔ ARM Interface @done(19-07-28 09:27)
+	✔ Memory @done(19-07-28 09:27)
+	✔ DSP Interface @done(19-07-28 09:27)
+	☐ PICA
+	☐ Movie
+	☐ Core Timing
+	☐ Kernel SVCs @started(19-07-28 09:27)
+		✔ Misc. Glue @done(19-07-28 09:24)
+		✔ AC @done(19-07-28 09:24)
+		✘ ACT @cancelled(19-07-28 09:27)
+		✔ AM @done(19-07-28 09:24)
+		☐ APT
+		☐ BOSS
+		☐ CAM
+		☐ CECD
+		☐ CFG
+		☐ CSND
+		☐ DLP
+		☐ DSP
+		☐ ERR
+		☐ FRD
+		☐ FS
+		☐ GSP
+		☐ HID
+		☐ HTTP
+		☐ IR
+		☐ LDR_RO
+		☐ MIC
+		☐ MVD
+		☐ NDM
+		☐ NEWS
+		☐ NFC
+		☐ NIM
+		☐ NS
+		☐ NWM
+		☐ PM
+		☐ PS
+		☐ PTM
+		☐ PXI
+		☐ QTM
+		☐ SM
+		☐ SOC
+		☐ SSL
+		☐ Y2R
+	☐ Kernel objects
+		☐ Misc. Glue
+		☐ Address arbiter
+		☐ Client Port
+		☐ Client Session
+		☐ Config Mem
+		☐ Event
+		☐ Handle Table
+		☐ IPC
+		☐ Mutex
+		☐ Process
+		☐ Resource Limit
+		☐ Semaphore
+		☐ Server Port
+		☐ Server Session
+		☐ Session
+		☐ Shared Memory
+		☐ Shared Page
+		☐ Thread
+		☐ Timer
+		☐ VM Manager
