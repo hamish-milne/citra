@@ -5,9 +5,12 @@
 ☐ Serialization @started(19-07-28 09:30)
 	✔ State manager @done(19-07-28 09:30)
 	✔ Binary reader/writer @done(19-07-28 09:30)
+	✔ Strings @done(19-08-03 18:43)
+	✔ Vectors @done(19-08-03 18:43)
 	☐ Compression
-	☐ Stream barriers
+	✔ Stream barriers @done(19-08-03 18:24)
 	☐ Exception handling
+	☐ Length checking/errors
 ☐ State sources
 	✔ ARM Interface @done(19-07-28 09:27)
 	✔ Memory @done(19-07-28 09:27)
@@ -54,23 +57,24 @@
 		☐ SSL
 		☐ Y2R
 	☐ Kernel objects
-		☐ Misc. Glue
-		☐ Address arbiter
-		☐ Client Port
-		☐ Client Session
-		☐ Config Mem
-		☐ Event
+		✔ Misc. Glue @done(19-08-03 18:20)
+		☐ Object graph
+		☐ Address arbiter @started(19-08-03 18:03)
+		✔ Client Port @started(19-08-03 18:03) @done(19-08-03 18:57) @lasted(54m23s)
+		✔ Client Session @started(19-08-03 18:03) @done(19-08-03 18:58) @lasted(55m16s)
+		☐ Event @started(19-08-03 18:03)
+		☐ Mutex @started(19-08-03 18:04)
+		☐ Process @started(19-08-03 18:04)
+		☐ Resource Limit @started(19-08-03 18:04)
+		✔ Semaphore @started(19-08-03 18:04) @done(19-08-03 18:51) @lasted(47m17s)
+		☐ Server Port @started(19-08-03 18:05)
+		☐ Server Session @started(19-08-03 18:05)
+		☐ Shared Memory @started(19-08-03 18:06)
+		☐ Thread @started(19-08-03 18:08)
+		☐ Timer @started(19-08-03 18:08)
+		☐ Shared Page
+		☐ Session
 		☐ Handle Table
 		☐ IPC
-		☐ Mutex
-		☐ Process
-		☐ Resource Limit
-		☐ Semaphore
-		☐ Server Port
-		☐ Server Session
-		☐ Session
-		☐ Shared Memory
-		☐ Shared Page
-		☐ Thread
-		☐ Timer
 		☐ VM Manager
+		☐ Config Mem

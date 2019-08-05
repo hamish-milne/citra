@@ -35,9 +35,6 @@ public:
     explicit AddressArbiter(KernelSystem& kernel);
     ~AddressArbiter() override;
 
-    std::string GetTypeName() const override {
-        return "Arbiter";
-    }
     std::string GetName() const override {
         return name;
     }
@@ -67,6 +64,10 @@ private:
 
     /// Threads waiting for the address arbiter to be signaled.
     std::vector<std::shared_ptr<Thread>> waiting_threads;
+
+    static constexpr SaveState::SectionId type_id {"AARB"};
+    void Serialize(std::ostream &stream);
+    void Deserialize(std::istream &stream);
 };
 
 } // namespace Kernel

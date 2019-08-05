@@ -20,9 +20,6 @@ public:
     explicit Mutex(KernelSystem& kernel);
     ~Mutex() override;
 
-    std::string GetTypeName() const override {
-        return "Mutex";
-    }
     std::string GetName() const override {
         return name;
     }
@@ -32,7 +29,7 @@ public:
         return HANDLE_TYPE;
     }
 
-    int lock_count;   ///< Number of times the mutex has been acquired
+    s32 lock_count;   ///< Number of times the mutex has been acquired
     u32 priority;     ///< The priority of the mutex, used for priority inheritance.
     std::string name; ///< Name of mutex (optional)
     std::shared_ptr<Thread> holding_thread; ///< Thread that has acquired the mutex
@@ -55,6 +52,9 @@ public:
      * @returns The result code of the operation.
      */
     ResultCode Release(Thread* thread);
+
+    void Serialize(std::ostream &stream) const override;
+    void Deserialize(std::istream &stream) override;
 
 private:
     KernelSystem& kernel;

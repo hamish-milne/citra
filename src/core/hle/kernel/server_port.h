@@ -23,9 +23,6 @@ public:
     explicit ServerPort(KernelSystem& kernel);
     ~ServerPort() override;
 
-    std::string GetTypeName() const override {
-        return "ServerPort";
-    }
     std::string GetName() const override {
         return name;
     }

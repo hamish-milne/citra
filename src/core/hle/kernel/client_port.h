@@ -21,9 +21,6 @@ public:
     ~ClientPort() override;
 
     friend class ServerPort;
-    std::string GetTypeName() const override {
-        return "ClientPort";
-    }
     std::string GetName() const override {
         return name;
     }
@@ -50,6 +47,9 @@ public:
      * decreasing the total number of active connections to this port.
      */
     void ConnectionClosed();
+
+    void Serialize(std::ostream &stream) const override;
+    void Deserialize(std::istream &stream) override;
 
 private:
     KernelSystem& kernel;

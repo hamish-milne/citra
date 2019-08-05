@@ -9,6 +9,7 @@
 #include "core/hle/kernel/event.h"
 #include "core/hle/kernel/kernel.h"
 #include "core/hle/kernel/thread.h"
+#include "core/savestate/binary_rw.h"
 
 namespace Kernel {
 
@@ -50,6 +51,22 @@ void Event::WakeupAllWaitingThreads() {
 
     if (reset_type == ResetType::Pulse)
         signaled = false;
+}
+
+void Event::Serialize(std::ostream &stream) const
+{
+    SaveState::BinaryWriter writer{stream};
+    writer.Write(reset_type);
+    writer.Write(signaled);
+    writer.Write(name);
+}
+
+void Event::Deserialize(std::istream &stream)
+{
+    SaveState::BinaryReader reader{stream};
+    reset_type = reader.Read<ResetType>();
+    signaled = reader.Read<bool>();
+    name = reader.ReadString();
 }
 
 } // namespace Kernel

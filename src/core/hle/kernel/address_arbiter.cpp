@@ -10,6 +10,7 @@
 #include "core/hle/kernel/kernel.h"
 #include "core/hle/kernel/thread.h"
 #include "core/memory.h"
+#include "core/savestate/binary_rw.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Kernel namespace
@@ -148,6 +149,20 @@ ResultCode AddressArbiter::ArbitrateAddress(std::shared_ptr<Thread> thread, Arbi
         return RESULT_TIMEOUT;
     }
     return RESULT_SUCCESS;
+}
+
+void AddressArbiter::Serialize(std::ostream &stream)
+{
+    SaveState::BinaryWriter writer{stream};
+    writer.WriteSingle(waiting_threads.size());
+    for (auto t : waiting_threads) {
+        writer.WriteSingle(t->GetThreadId());
+    }
+}
+
+void AddressArbiter::Deserialize(std::istream &stream)
+{
+    SaveState::BinaryReader reader{stream};
 }
 
 } // namespace Kernel

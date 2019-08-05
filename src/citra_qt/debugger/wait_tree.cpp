@@ -2,6 +2,8 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include "boost/type_index.hpp"
+
 #include "citra_qt/debugger/wait_tree.h"
 #include "citra_qt/util/util.h"
 
@@ -77,7 +79,7 @@ bool WaitTreeExpandableItem::IsExpandable() const {
 QString WaitTreeWaitObject::GetText() const {
     return tr("[%1]%2 %3")
         .arg(object.GetObjectId())
-        .arg(QString::fromStdString(object.GetTypeName()),
+        .arg(QString::fromStdString(boost::typeindex::type_id_runtime(object).pretty_name()),
              QString::fromStdString(object.GetName()));
 }
 

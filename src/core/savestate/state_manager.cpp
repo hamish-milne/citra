@@ -5,6 +5,8 @@
 #pragma once
 
 #include <algorithm>
+#include "boost/iostreams/stream.hpp"
+#include "boost/iostreams/restrict.hpp"
 #include "state_manager.h"
 
 namespace SaveState {
@@ -58,11 +60,11 @@ void StateManager::Load(std::istream &stream)
             }
         }
         if (source == nullptr) {
-            throw "Missing source";
             stream.seekg(length, +1);
             continue;
         }
-        source->Deserialize(stream);
+        boost::iostreams::stream stream_subset = boost::iostreams::restrict(stream, 0, length);
+        source->Deserialize(stream_subset);
     }
 }
 

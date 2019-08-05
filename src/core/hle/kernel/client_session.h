@@ -22,10 +22,6 @@ public:
 
     friend class KernelSystem;
 
-    std::string GetTypeName() const override {
-        return "ClientSession";
-    }
-
     std::string GetName() const override {
         return name;
     }
@@ -41,6 +37,9 @@ public:
      * @return ResultCode of the operation.
      */
     ResultCode SendSyncRequest(std::shared_ptr<Thread> thread);
+
+    void Serialize(std::ostream &stream) const override;
+    void Deserialize(std::istream &stream) override;
 
     std::string name; ///< Name of client port (optional)
 

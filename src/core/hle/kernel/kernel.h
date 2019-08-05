@@ -15,6 +15,7 @@
 #include "core/hle/kernel/memory.h"
 #include "core/hle/result.h"
 #include "core/memory.h"
+#include "core/savestate/state_manager.h"
 
 namespace ConfigMem {
 class Handler;
@@ -244,6 +245,15 @@ public:
 
     Core::Timing& timing;
 
+    template<typename T>
+    void Register()
+    {
+        readers[T::TypeName] = [](std::istream &stream){return Read<T>(stream)};
+    }
+
+    template<typename T>
+    std::shared_ptr<T> Read(std::istream &stream);
+
 private:
     void MemoryInit(u32 mem_type);
 
@@ -274,6 +284,9 @@ private:
 
     std::unique_ptr<ConfigMem::Handler> config_mem_handler;
     std::unique_ptr<SharedPage::Handler> shared_page_handler;
+
+    using Factory = std::function<std::shared_ptr<Object>(std::istream &stream)>;
+    const std::map<std::string, Factory> readers {};
 };
 
 } // namespace Kernel

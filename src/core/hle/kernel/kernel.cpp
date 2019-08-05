@@ -22,6 +22,20 @@ KernelSystem::KernelSystem(Memory::MemorySystem& memory, Core::Timing& timing,
       prepare_reschedule_callback(std::move(prepare_reschedule_callback)) {
     MemoryInit(system_mode);
 
+    Register<AddressArbiter>();
+    Register<ClientPort>();
+    Register<ClientSession>();
+    Register<Event>();
+    Register<Mutex>();
+    Register<Process>();
+    Register<ResourceLimit>();
+    Register<Semaphore>();
+    Register<ServerPort>();
+    Register<ServerSession>();
+    Register<SharedMemory>();
+    Register<Thread>();
+    Register<Timer>();
+
     resource_limits = std::make_unique<ResourceLimitList>(*this);
     thread_manager = std::make_unique<ThreadManager>(*this);
     timer_manager = std::make_unique<TimerManager>(timing);

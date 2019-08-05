@@ -43,9 +43,6 @@ public:
     std::string GetName() const override {
         return name;
     }
-    std::string GetTypeName() const override {
-        return "ServerSession";
-    }
 
     static constexpr HandleType HANDLE_TYPE = HandleType::ServerSession;
     HandleType GetHandleType() const override {

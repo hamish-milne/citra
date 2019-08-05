@@ -12,6 +12,7 @@
 #include "core/hle/kernel/mutex.h"
 #include "core/hle/kernel/object.h"
 #include "core/hle/kernel/thread.h"
+#include "core/savestate/binary_rw.h"
 
 namespace Kernel {
 
@@ -119,6 +120,24 @@ void Mutex::UpdatePriority() {
         priority = best_priority;
         holding_thread->UpdatePriority();
     }
+}
+
+void Mutex::Serialize(std::ostream &stream) const
+{
+    auto writer = SaveState::BinaryWriter{stream};
+    writer.WriteSingle(lock_count);
+    writer.WriteSingle(priority);
+    writer.Write(name);
+    // TODO: holding_thread ref
+}
+
+void Mutex::Deserialize(std::istream &stream)
+{
+    auto reader = SaveState::BinaryReader{stream};
+    lock_count = reader.Read<s32>();
+    priority = reader.Read<u32>();
+    name = reader.ReadString();
+    // TODO: holding thread ref
 }
 
 } // namespace Kernel

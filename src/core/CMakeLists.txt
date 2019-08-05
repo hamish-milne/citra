@@ -438,6 +438,7 @@ add_library(core STATIC
     rpc/udp_server.h
     savestate/state_manager.cpp
     savestate/state_manager.h
+    savestate/state_object.h
     settings.cpp
     settings.h
     telemetry_session.cpp

@@ -10,6 +10,7 @@
 #include "core/hle/kernel/object.h"
 #include "core/hle/kernel/server_port.h"
 #include "core/hle/kernel/server_session.h"
+#include "core/savestate/binary_rw.h"
 
 namespace Kernel {
 
@@ -43,6 +44,24 @@ void ClientPort::ConnectionClosed() {
     ASSERT(active_sessions > 0);
 
     --active_sessions;
+}
+
+void ClientPort::Serialize(std::ostream &stream) const
+{
+    SaveState::BinaryWriter writer{stream};
+    // TODO: Port ref
+    writer.WriteSingle(max_sessions);
+    writer.WriteSingle(active_sessions);
+    writer.Write(name);
+}
+
+void ClientPort::Deserialize(std::istream &stream)
+{
+    SaveState::BinaryReader reader{stream};
+    // TODO: Port ref
+    max_sessions = reader.Read<s32>();
+    active_sessions = reader.Read<s32>();
+    name = reader.ReadString();
 }
 
 } // namespace Kernel

@@ -18,9 +18,6 @@ public:
     explicit SharedMemory(KernelSystem& kernel);
     ~SharedMemory() override;
 
-    std::string GetTypeName() const override {
-        return "SharedMemory";
-    }
     std::string GetName() const override {
         return name;
     }

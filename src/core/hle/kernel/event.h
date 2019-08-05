@@ -15,9 +15,6 @@ public:
     explicit Event(KernelSystem& kernel);
     ~Event() override;
 
-    std::string GetTypeName() const override {
-        return "Event";
-    }
     std::string GetName() const override {
         return name;
     }
@@ -41,6 +38,9 @@ public:
 
     void Signal();
     void Clear();
+
+    void Serialize(std::ostream &stream) const override;
+    void Deserialize(std::istream &stream) override;
 
 private:
     ResetType reset_type; ///< Current ResetType

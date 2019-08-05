@@ -156,9 +156,6 @@ public:
     std::string GetName() const override {
         return name;
     }
-    std::string GetTypeName() const override {
-        return "Thread";
-    }
 
     static constexpr HandleType HANDLE_TYPE = HandleType::Thread;
     HandleType GetHandleType() const override {

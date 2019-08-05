@@ -14,6 +14,7 @@
 #include "core/hle/kernel/thread.h"
 #include "core/hle/kernel/vm_manager.h"
 #include "core/memory.h"
+#include "core/savestate/binary_rw.h"
 
 namespace Kernel {
 
@@ -28,6 +29,26 @@ std::shared_ptr<CodeSet> KernelSystem::CreateCodeSet(std::string name, u64 progr
 
 CodeSet::CodeSet(KernelSystem& kernel) : Object(kernel) {}
 CodeSet::~CodeSet() {}
+
+void CodeSet::Serialize(std::ostream &stream) const
+{
+    auto writer = SaveState::BinaryWriter{stream};
+    // TODO: Memory ref
+    writer.Write(segments);
+    writer.WriteSingle(entrypoint);
+    writer.Write(name);
+    writer.Write(program_id);
+}
+
+void CodeSet::Deserialize(std::istream &stream)
+{
+    auto reader = SaveState::BinaryReader{stream};
+    // TODO: Memory ref
+    reader.Read(segments);
+    entrypoint = reader.Read<VAddr>();
+    name = reader.ReadString();
+    program_id = reader.Read<u64>();
+}
 
 std::shared_ptr<Process> KernelSystem::CreateProcess(std::shared_ptr<CodeSet> code_set) {
     auto process{std::make_shared<Process>(*this)};

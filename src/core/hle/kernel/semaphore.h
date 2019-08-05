@@ -6,10 +6,12 @@
 
 #include <string>
 #include <queue>
+#include <memory>
 #include "common/common_types.h"
 #include "core/hle/kernel/object.h"
 #include "core/hle/kernel/wait_object.h"
 #include "core/hle/result.h"
+#include "core/savestate/state_manager.h"
 
 namespace Kernel {
 
@@ -18,9 +20,6 @@ public:
     explicit Semaphore(KernelSystem& kernel);
     ~Semaphore() override;
 
-    std::string GetTypeName() const override {
-        return "Semaphore";
-    }
     std::string GetName() const override {
         return name;
     }
@@ -43,6 +42,9 @@ public:
      * @return The number of free slots the semaphore had before this call
      */
     ResultVal<s32> Release(s32 release_count);
+
+    void Serialize(std::ostream &stream) const override;
+    void Deserialize(std::istream &stream) override;
 };
 
 } // namespace Kernel

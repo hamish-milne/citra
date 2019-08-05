@@ -7,6 +7,7 @@
 #include "core/hle/kernel/kernel.h"
 #include "core/hle/kernel/semaphore.h"
 #include "core/hle/kernel/thread.h"
+#include "core/savestate/binary_rw.h"
 
 namespace Kernel {
 
@@ -51,6 +52,22 @@ ResultVal<s32> Semaphore::Release(s32 release_count) {
     WakeupAllWaitingThreads();
 
     return MakeResult<s32>(previous_count);
+}
+
+void Semaphore::Serialize(std::ostream &stream) const
+{
+    SaveState::BinaryWriter writer{stream};
+    writer.WriteSingle(max_count);
+    writer.WriteSingle(available_count);
+    writer.Write(name);
+}
+
+void Semaphore::Deserialize(std::istream &stream)
+{
+    SaveState::BinaryReader reader{stream};
+    max_count = reader.Read<s32>();
+    available_count = reader.Read<s32>();
+    name = reader.ReadString();
 }
 
 } // namespace Kernel

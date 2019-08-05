@@ -6,6 +6,7 @@
 #include <cinttypes>
 #include <map>
 #include <fmt/format.h>
+#include "boost/type_index.hpp"
 #include "common/logging/log.h"
 #include "common/microprofile.h"
 #include "common/scope_exit.h"
@@ -405,7 +406,7 @@ ResultCode SVC::WaitSynchronization1(Handle handle, s64 nano_seconds) {
         return ERR_INVALID_HANDLE;
 
     LOG_TRACE(Kernel_SVC, "called handle=0x{:08X}({}:{}), nanoseconds={}", handle,
-              object->GetTypeName(), object->GetName(), nano_seconds);
+              boost::typeindex::type_id_runtime(object).name(), object->GetName(), nano_seconds);
 
     if (object->ShouldWait(thread)) {
 

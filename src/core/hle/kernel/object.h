@@ -48,9 +48,6 @@ public:
         return object_id.load(std::memory_order_relaxed);
     }
 
-    virtual std::string GetTypeName() const {
-        return "[BAD KERNEL OBJECT TYPE]";
-    }
     virtual std::string GetName() const {
         return "[UNKNOWN KERNEL OBJECT]";
     }
@@ -61,6 +58,9 @@ public:
      * @return True if a thread can wait on the object, otherwise false
      */
     bool IsWaitable() const;
+
+    virtual void Serialize(std::ostream &stream) const = 0;
+    virtual void Deserialize(std::istream &stream) = 0;
 
 private:
     std::atomic<u32> object_id;

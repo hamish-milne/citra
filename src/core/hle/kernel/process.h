@@ -56,14 +56,11 @@ public:
     ~CodeSet() override;
 
     struct Segment {
-        std::size_t offset = 0;
+        u64 offset = 0;
         VAddr addr = 0;
         u32 size = 0;
     };
 
-    std::string GetTypeName() const override {
-        return "CodeSet";
-    }
     std::string GetName() const override {
         return name;
     }
@@ -97,6 +94,9 @@ public:
         return segments[2];
     }
 
+    void Serialize(std::ostream &stream) const override;
+    void Deserialize(std::istream &stream) override;
+
     std::vector<u8> memory;
 
     std::array<Segment, 3> segments;
@@ -113,9 +113,6 @@ public:
     explicit Process(Kernel::KernelSystem& kernel);
     ~Process() override;
 
-    std::string GetTypeName() const override {
-        return "Process";
-    }
     std::string GetName() const override {
         return codeset->name;
     }

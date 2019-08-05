@@ -10,6 +10,7 @@
 #include "core/hle/kernel/server_session.h"
 #include "core/hle/kernel/session.h"
 #include "core/hle/kernel/thread.h"
+#include "core/savestate/binary_rw.h"
 
 namespace Kernel {
 
@@ -50,6 +51,20 @@ ResultCode ClientSession::SendSyncRequest(std::shared_ptr<Thread> thread) {
 
     // Signal the server session that new data is available
     return server->HandleSyncRequest(std::move(thread));
+}
+
+void ClientSession::Serialize(std::ostream &stream) const
+{
+    SaveState::BinaryWriter writer{stream};
+    // TODO: Session ref
+    writer.Write(name);
+}
+
+void ClientSession::Deserialize(std::istream &stream)
+{
+    SaveState::BinaryReader reader{stream};
+    // TODO: Session ref
+    name = reader.ReadString();
 }
 
 } // namespace Kernel

@@ -5,6 +5,7 @@
 #pragma once
 
 #include <iostream>
+#include <string>
 #include "common/common_types.h"
 
 namespace SaveState {
@@ -32,6 +33,21 @@ struct BinaryReader
     {
         stream.read(reinterpret_cast<char*>(sequence), size * sizeof(T));
     }
+
+    std::string ReadString()
+    {
+        std::string retval(Read<u32>(), '\0');
+        stream.read(retval.data(), retval.size());
+        return retval;
+    }
+
+    template<typename T>
+    std::vector<T> ReadVector()
+    {
+        std::vector<T> retval(Read<u32>());
+        stream.read(retval.data(), retval.size());
+        return retval;
+    }
 };
 
 struct BinaryWriter
@@ -54,6 +70,20 @@ struct BinaryWriter
     void WriteSingle(const T &value)
     {
         stream.write(reinterpret_cast<const char*>(&value), sizeof(T));
+    }
+
+    template<>
+    void Write(const std::string &sequence)
+    {
+        WriteSingle(static_cast<u32>(sequence.size()));
+        stream.write(sequence.data(), sequence.size());
+    }
+
+    template<typename T>
+    void WriteVector(const std::vector<T> &vector)
+    {
+        WriteSingle(static_cast<u32>(sequence.size()));
+        Write(vector.data(), vector.size());
     }
 };
 

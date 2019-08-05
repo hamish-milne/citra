@@ -40,9 +40,6 @@ public:
     explicit Timer(KernelSystem& kernel);
     ~Timer() override;
 
-    std::string GetTypeName() const override {
-        return "Timer";
-    }
     std::string GetName() const override {
         return name;
     }

@@ -42,9 +42,6 @@ public:
     static std::shared_ptr<ResourceLimit> Create(KernelSystem& kernel,
                                                  std::string name = "Unknown");
 
-    std::string GetTypeName() const override {
-        return "ResourceLimit";
-    }
     std::string GetName() const override {
         return name;
     }
