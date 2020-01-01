@@ -29,8 +29,8 @@ strategy:
       imageName: "ubuntu-18.04"
       generator: "Ninja"
       deps: |
-        sudo echo 'deb http://ppa.launchpad.net/tobydox/mingw-w64/ubuntu bionic main ' > /etc/apt/sources.list.d/extras.list
         sudo apt-key adv --keyserver keyserver.ubuntu.com --recv '72931B477E22FEFD47F8DECE02FE5F12ADDE29B2'
+        sudo add-apt-repository http://ppa.launchpad.net/tobydox/mingw-w64/ubuntu
         sudo apt-get -y update
         sudo apt-get -y install \
           g++-mingw-w64-x86-64 \
@@ -65,8 +65,9 @@ strategy:
       generator: "MSYS Makefiles"
       deps: |
         choco install msys2
-        tools/msys64/usr/bin/bash -C "pacman -Syu"
-        tools/msys64/usr/bin/bash -C "pacman -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make"
+        C:/tools/msys64/usr/bin/bash -lc "pacman-key --init"
+        C:/tools/msys64/usr/bin/bash -lc "pacman -Syu"
+        C:/tools/msys64/usr/bin/bash -lc "pacman -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make"
       defs: ""
       cross: true
   maxParallel: 5
