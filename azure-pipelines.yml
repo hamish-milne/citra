@@ -1,0 +1,26 @@
+trigger:
+- master
+
+strategy:
+  matrix:
+    linux:
+      imageName: "ubuntu-latest"
+      generator: "Ninja"
+    mac:
+      imageName: "macos-latest"
+      generator: "Ninja"
+    windows-msvc:
+      imageName: "windows-latest"
+      generator: "Visual Studio 16 2019"
+    windows-mingw:
+      imageName: "windows-latest"
+      generator: "MSYS Makefiles"
+  maxParallel: 3
+
+pool:
+  vmImage: $(imageName)
+
+steps:
+- task: CMake@1
+  inputs:
+    cmakeArgs: -G $(generator)
