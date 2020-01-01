@@ -44,9 +44,9 @@ steps:
   displayName: Dependencies
 - task: Cache@2
   inputs:
-    key: '"cmake" | "$(imageName)" | "$(Build.SourceVersion)"'
+    key: '"cmake" | "$(Agent.JobName)" | "$(Build.SourceVersion)"'
     restoreKeys: |
-       "cmake" | "$(imageName)"
+       "cmake" | "$(Agent.JobName)"
     path: build
   displayName: Cache build files
 - task: CMake@1
