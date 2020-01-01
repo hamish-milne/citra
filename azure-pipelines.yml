@@ -42,6 +42,13 @@ steps:
   submodules: recursive
 - bash: $(deps)
   displayName: Dependencies
+- task: Cache@2
+  inputs:
+    key: '"cmake" | "$(imageName)" | "$(Build.SourceVersion)"'
+    restoreKeys: |
+       "cmake" | "$(imageName)"
+    path: build
+  displayName: Cache build files
 - task: CMake@1
   displayName: Configure
   inputs:
