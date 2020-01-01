@@ -3,16 +3,16 @@ trigger:
 
 strategy:
   matrix:
-    linux:
+    Linux:
       imageName: "ubuntu-latest"
       generator: "Ninja"
-    mac:
+    MacOS:
       imageName: "macos-latest"
       generator: "Ninja"
-    windows-msvc:
+    Windows-MSVC:
       imageName: "windows-latest"
       generator: "Visual Studio 16 2019"
-    windows-mingw:
+    Windows-MinGW:
       imageName: "windows-latest"
       generator: "MSYS Makefiles"
   maxParallel: 3
@@ -22,5 +22,10 @@ pool:
 
 steps:
 - task: CMake@1
+  displayName: Configure
   inputs:
-    cmakeArgs: -G $(generator)
+    cmakeArgs: .. -G "$(generator)"
+- task: CMake@1
+  displayName: Build
+  inputs:
+    cmakeArgs: --build .
