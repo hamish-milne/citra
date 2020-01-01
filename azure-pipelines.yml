@@ -23,21 +23,23 @@ pool:
 steps:
 - checkout: self
   submodules: recursive
-- bash: sudo apt-get -y install libsdl2-dev qtbase5-dev libqt5opengl5-dev qtmultimedia5-dev qttools5-dev qttools5-dev-tools libavcodec-dev libavformat-dev libswscale-dev ninja-build
+- bash: |
+    sudo apt-get update
+    sudo apt-get -y install libsdl2-dev qtbase5-dev libqt5opengl5-dev qtmultimedia5-dev qttools5-dev qttools5-dev-tools libavcodec-dev libavformat-dev libswscale-dev ninja-build
   displayName: Linux dependencies
   condition: eq(variables.imageName, 'ubuntu-latest')
 - bash: |
     brew update
     brew unlink python@2
-    brew install sdl2 ffmpeg ninja
+    brew install sdl2 qt5 ffmpeg ninja
     pip3 install macpack
   displayName: MacOS dependencies
   condition: eq(variables.imageName, 'macos-latest')
 - task: CMake@1
   displayName: Configure
   inputs:
-    cmakeArgs: .. -G "$(generator)"
+    cmakeArgs: .. -G "$(generator)" -DCMAKE_BUILD_TYPE=Release
 - task: CMake@1
   displayName: Build
   inputs:
-    cmakeArgs: --build .
+    cmakeArgs: --build . --config Release
