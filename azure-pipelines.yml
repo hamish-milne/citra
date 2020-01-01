@@ -11,8 +11,39 @@ strategy:
       generator: "Ninja"
       deps: |
         sudo apt-get -y update
-        sudo apt-get -y install build-essential libsdl2-dev qtbase5-dev libqt5opengl5-dev qtmultimedia5-dev qttools5-dev qttools5-dev-tools libavcodec-dev libavformat-dev libswscale-dev ninja-build cmake
+        sudo apt-get -y install \
+          build-essential \
+          libsdl2-dev \
+          qtbase5-dev \
+          libqt5opengl5-dev \
+          qtmultimedia5-dev \
+          qttools5-dev \
+          qttools5-dev-tools \
+          libavcodec-dev \
+          libavformat-dev \
+          libswscale-dev \
+          ninja-build
       defs: ""
+      cross: false
+    Linux-MinGW:
+      imageName: "ubuntu-18.04"
+      generator: "Ninja"
+      deps: |
+        sudo echo 'deb http://ppa.launchpad.net/tobydox/mingw-w64/ubuntu bionic main ' > /etc/apt/sources.list.d/extras.list
+        sudo apt-key adv --keyserver keyserver.ubuntu.com --recv '72931B477E22FEFD47F8DECE02FE5F12ADDE29B2'
+        sudo apt-get -y update
+        sudo apt-get -y install \
+          g++-mingw-w64-x86-64 \
+          gcc-mingw-w64-x86-64 \
+          mingw-w64-tools \
+          ninja-build \
+          sdl2-mingw-w64 \
+          qt5base-mingw-w64 \
+          qt5tools-mingw-w64 \
+          libsamplerate-mingw-w64 \
+          qt5multimedia-mingw-w64
+      defs: -DCMAKE_TOOLCHAIN_FILE="$(Build.SourcesDirectory)/CMakeModules/MinGWCross.cmake"
+      cross: false
     MacOS:
       imageName: "macos-10.14"
       generator: "Ninja"
@@ -22,17 +53,23 @@ strategy:
         brew install sdl2 qt ffmpeg ninja
         pip3 install mac
       defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
+      cross: false
     Windows-MSVC:
       imageName: "windows-2019"
       generator: "Visual Studio 16 2019"
       deps: ""
       defs: ""
+      cross: false
     Windows-MinGW:
       imageName: "windows-latest"
       generator: "MSYS Makefiles"
-      deps: ""
+      deps: |
+        choco install msys2
+        tools/msys64/usr/bin/bash -C "pacman -Syu"
+        tools/msys64/usr/bin/bash -C "pacman -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make"
       defs: ""
-  maxParallel: 4
+      cross: true
+  maxParallel: 5
 
 pool:
   vmImage: $(imageName)
@@ -42,13 +79,6 @@ steps:
   submodules: recursive
 - bash: $(deps)
   displayName: Dependencies
-- task: Cache@2
-  inputs:
-    key: '"cmake" | "$(Agent.JobName)" | "$(Build.SourceVersion)"'
-    restoreKeys: |
-       "cmake" | "$(Agent.JobName)"
-    path: build
-  displayName: Cache build files
 - task: CMake@1
   displayName: Configure
   inputs:
@@ -60,6 +90,7 @@ steps:
 - script: ctest -C $(config)
   displayName: Test
   workingDirectory: build
+  condition: not(variables.cross)
 - task: PublishPipelineArtifact@1
   displayName: Publish
   inputs:
