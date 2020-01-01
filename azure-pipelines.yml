@@ -7,15 +7,14 @@ variables:
 strategy:
   matrix:
     Linux:
-      imageName: "ubuntu-latest"
+      imageName: "ubuntu-18.04"
       generator: "Ninja"
       deps: |
         sudo apt-get -y update
-        sudo apt-get -y install gcc-7 g++-7 libsdl2-dev qtbase5-dev libqt5opengl5-dev qtmultimedia5-dev qttools5-dev qttools5-dev-tools libavcodec-dev libavformat-dev libswscale-dev ninja-build cmake
-        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 700 --slave /usr/bin/g++ g++ /usr/bin/g++-7
+        sudo apt-get -y install build-essential libsdl2-dev qtbase5-dev libqt5opengl5-dev qtmultimedia5-dev qttools5-dev qttools5-dev-tools libavcodec-dev libavformat-dev libswscale-dev ninja-build cmake
       defs: ""
     MacOS:
-      imageName: "macos-latest"
+      imageName: "macos-10.14"
       generator: "Ninja"
       deps: |
         brew update
@@ -24,7 +23,7 @@ strategy:
         pip3 install mac
       defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
     Windows-MSVC:
-      imageName: "windows-latest"
+      imageName: "windows-2019"
       generator: "Visual Studio 16 2019"
       deps: ""
       defs: ""
@@ -57,4 +56,5 @@ steps:
 - task: PublishPipelineArtifact@1
   displayName: Publish
   inputs:
-    targetPath: build/bin/$(config)
+    artifactName: $(Agent.JobName)
+    targetPath: build/bin
