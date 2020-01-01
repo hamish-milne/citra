@@ -24,16 +24,18 @@ steps:
 - checkout: self
   submodules: recursive
 - bash: |
-    sudo apt-get update
+    sudo apt-get -y update
+    sudo apt-get -y upgrade
     sudo apt-get -y install libsdl2-dev qtbase5-dev libqt5opengl5-dev qtmultimedia5-dev qttools5-dev qttools5-dev-tools libavcodec-dev libavformat-dev libswscale-dev ninja-build
-  displayName: Linux dependencies
+  displayName: Dependencies (Linux)
   condition: eq(variables.imageName, 'ubuntu-latest')
 - bash: |
     brew update
     brew unlink python@2
     brew install sdl2 qt5 ffmpeg ninja
     pip3 install macpack
-  displayName: MacOS dependencies
+    export Qt5_DIR=$(brew --prefix)/opt/qt5
+  displayName: Dependencies (MacOS)
   condition: eq(variables.imageName, 'macos-latest')
 - task: CMake@1
   displayName: Configure
@@ -43,3 +45,11 @@ steps:
   displayName: Build
   inputs:
     cmakeArgs: --build . --config Release
+- script: ctest
+  displayName: Test
+  workingDirectory: build
+- task: PublishPipelineArtifact@1
+  displayName: Publish
+  inputs:
+    targetPath: '$(Pipeline.Workspace)/build/bin'
+    publishLocation: 'pipeline'
