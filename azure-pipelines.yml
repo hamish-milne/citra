@@ -5,10 +5,10 @@ strategy:
   matrix:
     Linux:
       imageName: "ubuntu-latest"
-      generator: "Unix Makefiles"
+      generator: "Ninja"
     MacOS:
       imageName: "macos-latest"
-      generator: "Unix Makefiles"
+      generator: "Ninja"
     Windows-MSVC:
       imageName: "windows-latest"
       generator: "Visual Studio 16 2019"
@@ -22,7 +22,17 @@ pool:
 
 steps:
 - checkout: self
-  submodules: true
+  submodules: recursive
+- bash: sudo apt-get -y install libsdl2-dev qtbase5-dev libqt5opengl5-dev qtmultimedia5-dev qttools5-dev qttools5-dev-tools libavcodec-dev libavformat-dev libswscale-dev ninja-build
+  displayName: Linux dependencies
+  condition: eq(variables.imageName, "ubuntu-latest")
+- bash: |
+    brew update
+    brew unlink python@2
+    brew install sdl2 ffmpeg ninja
+    pip3 install macpack
+  displayName: MacOS dependencies
+  condition: eq(variables.imageName, "macos-latest")
 - task: CMake@1
   displayName: Configure
   inputs:
