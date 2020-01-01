@@ -12,7 +12,7 @@ strategy:
       deps: |
         sudo apt-get -y update
         sudo apt-get -y install gcc-7 g++-7 libsdl2-dev qtbase5-dev libqt5opengl5-dev qtmultimedia5-dev qttools5-dev qttools5-dev-tools libavcodec-dev libavformat-dev libswscale-dev ninja-build cmake
-        udo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 700 --slave /usr/bin/g++ g++ /usr/bin/g++-7
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 700 --slave /usr/bin/g++ g++ /usr/bin/g++-7
       defs: ""
     MacOS:
       imageName: "macos-latest"
@@ -22,8 +22,7 @@ strategy:
         brew unlink python@2
         brew install sdl2 qt ffmpeg ninja
         pip3 install mac
-        brew --prefix qt
-      defs: -DQt5_DIR=\$(brew --prefix qt)/lib/cmake/Qt5
+      defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
     Windows-MSVC:
       imageName: "windows-latest"
       generator: "Visual Studio 16 2019"
