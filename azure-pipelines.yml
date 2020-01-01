@@ -1,20 +1,37 @@
 trigger:
 - master
 
+variables:
+  config: Release
+
 strategy:
   matrix:
     Linux:
       imageName: "ubuntu-latest"
       generator: "Ninja"
+      deps: |
+        sudo apt-get -y update
+        sudo apt-get -y install build-essential libsdl2-dev qtbase5-dev libqt5opengl5-dev qtmultimedia5-dev qttools5-dev qttools5-dev-tools libavcodec-dev libavformat-dev libswscale-dev ninja-build cmake
+      defs: ""
     MacOS:
       imageName: "macos-latest"
       generator: "Ninja"
+      deps: |
+        brew update
+        brew unlink python@2
+        brew install sdl2 qt ffmpeg ninja
+        pip3 install mac
+      defs: -DQt5_DIR=$(brew --prefix qt5)/lib/cmake/Qt5
     Windows-MSVC:
       imageName: "windows-latest"
       generator: "Visual Studio 16 2019"
+      deps: ""
+      defs: ""
     Windows-MinGW:
       imageName: "windows-latest"
       generator: "MSYS Makefiles"
+      deps: ""
+      defs: ""
   maxParallel: 4
 
 pool:
@@ -23,29 +40,17 @@ pool:
 steps:
 - checkout: self
   submodules: recursive
-- bash: |
-    sudo apt-get -y update
-    sudo apt-get -y upgrade
-    sudo apt-get -y install libsdl2-dev qtbase5-dev libqt5opengl5-dev qtmultimedia5-dev qttools5-dev qttools5-dev-tools libavcodec-dev libavformat-dev libswscale-dev ninja-build
-  displayName: Dependencies (Linux)
-  condition: eq(variables.imageName, 'ubuntu-latest')
-- bash: |
-    brew update
-    brew unlink python@2
-    brew install sdl2 qt5 ffmpeg ninja
-    pip3 install macpack
-    export Qt5_DIR=$(brew --prefix)/opt/qt5
-  displayName: Dependencies (MacOS)
-  condition: eq(variables.imageName, 'macos-latest')
+- bash: $(deps)
+  displayName: Dependencies
 - task: CMake@1
   displayName: Configure
   inputs:
-    cmakeArgs: .. -G "$(generator)" -DCMAKE_BUILD_TYPE=Release
+    cmakeArgs: .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs)
 - task: CMake@1
   displayName: Build
   inputs:
-    cmakeArgs: --build . --config Release
-- script: ctest
+    cmakeArgs: --build . --config $(config)
+- script: ctest -C $(config)
   displayName: Test
   workingDirectory: build
 - task: PublishPipelineArtifact@1
