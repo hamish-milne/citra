@@ -5,22 +5,24 @@ strategy:
   matrix:
     Linux:
       imageName: "ubuntu-latest"
-      generator: "Ninja"
+      generator: "Unix Makefiles"
     MacOS:
       imageName: "macos-latest"
-      generator: "Ninja"
+      generator: "Unix Makefiles"
     Windows-MSVC:
       imageName: "windows-latest"
       generator: "Visual Studio 16 2019"
     Windows-MinGW:
       imageName: "windows-latest"
       generator: "MSYS Makefiles"
-  maxParallel: 3
+  maxParallel: 4
 
 pool:
   vmImage: $(imageName)
 
 steps:
+- checkout: self
+  submodules: true
 - task: CMake@1
   displayName: Configure
   inputs:
