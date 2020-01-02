@@ -66,11 +66,15 @@ strategy:
 
     Windows-MinGW:
       imageName: "windows-2019"
+      generator: "MSYS Makefiles"
+      # Tell msys2 to add mingw64 to the path
+      MSYSTEM: MINGW64
+      # Tell msys2 to inherit the current directory when starting the shell
+      CHERE_INVOKING: 1
       deps: |
         git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.BuildDirectory)/msys2"
         "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
-        "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} cmake ninja
-      defs: -DCMAKE_C_COMPILER="/mingw64/bin/gcc" -DCMAKE_CXX_COMPILER="/mingw64/bin/g++"
+        "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
       cmake_shell: "\"$(Agent.BuildDirectory)/msys2/usr/bin/bash\" -lc '"
       shell_end: "'"
 
@@ -84,10 +88,12 @@ steps:
     mkdir build
     $(deps)
   displayName: Dependencies
-- script: $(cmake_shell) cmake "-H$(Build.SourcesDirectory)" "-B$(Build.SourcesDirectory)/build" -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
+- script: $(cmake_shell) cmake .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
   displayName: Configure
-- script: $(cmake_shell) cmake --build "$(Build.SourcesDirectory)/build" --config $(config) $(shell_end)
+  workingDirectory: build
+- script: $(cmake_shell) cmake --build . --config $(config) $(shell_end)
   displayName: Build
+  workingDirectory: build
 - script: ctest -C $(config)
   displayName: Test
   workingDirectory: build
