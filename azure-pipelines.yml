@@ -57,8 +57,6 @@ strategy:
     Windows-MSVC:
       imageName: "windows-2019"
       generator: "Visual Studio 16 2019"
-      deps: ""
-      defs: ""
       cross: false
     Windows-MinGW:
       imageName: "windows-latest"
@@ -69,6 +67,8 @@ strategy:
         "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
       defs: -DCMAKE_MAKE_PROGRAM="$(Agent.BuildDirectory)/msys2/usr/bin/make"
       cross: false
+      shell: "'$(Agent.BuildDirectory)/msys2/usr/bin/bash' -lc '"
+      shell_end: "'"
   maxParallel: 5
 
 pool:
@@ -79,14 +79,10 @@ steps:
   submodules: recursive
 - script: $(deps)
   displayName: Dependencies
-- task: CMake@1
+- script: $(shell) cmake .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
   displayName: Configure
-  inputs:
-    cmakeArgs: .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs)
-- task: CMake@1
+- script: $(shell) cmake --build . --config $(config) $(shell_end)
   displayName: Build
-  inputs:
-    cmakeArgs: --build . --config $(config)
 - script: ctest -C $(config)
   displayName: Test
   workingDirectory: build
