@@ -24,7 +24,7 @@ strategy:
           libswscale-dev \
           ninja-build
       defs: ""
-      cross: False
+      cross: 0
     Linux-MinGW:
       imageName: "ubuntu-18.04"
       generator: "Ninja"
@@ -43,7 +43,7 @@ strategy:
           libsamplerate-mingw-w64 \
           qt5multimedia-mingw-w64
       defs: -DCMAKE_TOOLCHAIN_FILE="$(Build.SourcesDirectory)/CMakeModules/MinGWCross.cmake"
-      cross: False
+      cross: 1
     MacOS:
       imageName: "macos-10.14"
       generator: "Ninja"
@@ -53,22 +53,22 @@ strategy:
         brew install sdl2 qt ffmpeg ninja
         pip3 install mac
       defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
-      cross: False
+      cross: 0
     Windows-MSVC:
       imageName: "windows-2019"
       generator: "Visual Studio 16 2019"
       deps: ""
       defs: ""
-      cross: False
+      cross: 0
     Windows-MinGW:
       imageName: "windows-latest"
       generator: "MSYS Makefiles"
       deps: |
-        choco install msys2
-        C:/tools/msys64/usr/bin/pacman -Syuu
-        C:/tools/msys64/usr/bin/pacman -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
-      defs: ""
-      cross: True
+        git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.ToolsDirectory)/msys2"
+        "$(Agent.ToolsDirectory)/msys2/usr/bin/pacman" -Syyuu
+        "$(Agent.ToolsDirectory)/msys2/usr/bin/pacman" -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
+      defs: -DCMAKE_MAKE_PROGRAM="$(Agent.ToolsDirectory)/msys2/usr/bin/make"
+      cross: 0
   maxParallel: 5
 
 pool:
