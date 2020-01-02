@@ -74,15 +74,15 @@ strategy:
       shell: "'$(Agent.BuildDirectory)/msys2/usr/bin/bash' -lc '"
       shell_end: "'"
 
-  maxParallel: 5
-
 pool:
   vmImage: $(imageName)
 
 steps:
 - checkout: self
   submodules: recursive
-- script: $(deps)
+- script: |
+    mkdir build
+    $(deps)
   displayName: Dependencies
 - script: $(shell) cmake .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
   displayName: Configure
