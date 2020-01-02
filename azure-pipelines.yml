@@ -18,6 +18,7 @@ strategy:
       deps: |
         sudo apt-get -y update
         sudo apt-get -y install \
+          cmake \
           build-essential \
           libsdl2-dev \
           qtbase5-dev \
@@ -37,6 +38,7 @@ strategy:
         sudo add-apt-repository http://ppa.launchpad.net/tobydox/mingw-w64/ubuntu
         sudo apt-get -y update
         sudo apt-get -y install \
+          cmake \
           g++-mingw-w64-x86-64 \
           gcc-mingw-w64-x86-64 \
           mingw-w64-tools \
@@ -68,6 +70,7 @@ strategy:
         git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.BuildDirectory)/msys2"
         "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
         "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} cmake ninja
+      defs: -DCC="/mingw64/bin/gcc" -DCXX="/mingw64/bin/g++"
       cmake_shell: "\"$(Agent.BuildDirectory)/msys2/usr/bin/bash\" -lc '"
       shell_end: "'"
 
