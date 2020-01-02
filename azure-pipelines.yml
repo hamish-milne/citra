@@ -70,7 +70,7 @@ strategy:
         git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.BuildDirectory)/msys2"
         "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
         "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} cmake ninja
-      defs: -DCC="/mingw64/bin/gcc" -DCXX="/mingw64/bin/g++"
+      defs: -DCMAKE_C_COMPILER="/mingw64/bin/gcc" -DCMAKE_CXX_COMPILER="/mingw64/bin/g++"
       cmake_shell: "\"$(Agent.BuildDirectory)/msys2/usr/bin/bash\" -lc '"
       shell_end: "'"
 
@@ -84,7 +84,7 @@ steps:
     mkdir build
     $(deps)
   displayName: Dependencies
-- script: $(cmake_shell) cmake -S "$(Build.SourcesDirectory)" -B "$(Build.SourcesDirectory)/build" -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
+- script: $(cmake_shell) cmake "-B$(Build.SourcesDirectory)" "-H$(Build.SourcesDirectory)/build" -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
   displayName: Configure
 - script: $(cmake_shell) cmake --build "$(Build.SourcesDirectory)/build" --config $(config) $(shell_end)
   displayName: Build
