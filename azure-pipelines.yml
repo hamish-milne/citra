@@ -81,11 +81,10 @@ steps:
     mkdir build
     $(deps)
   displayName: Dependencies
-  condition: and(succeeded(), ne(variables.deps, ''))
 - script: $(cmake_shell) cmake .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
   displayName: Configure
   workingDirectory: build
-- script: $(cmake_shell) cmake --build . --config $(config) $(shell_end)
+- script: $(cmake_shell) cmake --build "$(Build.SourcesDirectory)/build" --config $(config) $(shell_end)
   displayName: Build
   workingDirectory: build
 - script: ctest -C $(config)
