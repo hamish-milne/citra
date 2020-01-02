@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 #include <vector>
+#include <boost/cerrno.hpp>
 #include "common/assert.h"
 #include "common/bit_field.h"
 #include "common/common_types.h"
