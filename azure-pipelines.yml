@@ -24,7 +24,7 @@ strategy:
           libswscale-dev \
           ninja-build
       defs: ""
-      cross: ${{false}}
+      cross: false
     Linux-MinGW:
       imageName: "ubuntu-18.04"
       generator: "Ninja"
@@ -43,7 +43,7 @@ strategy:
           libsamplerate-mingw-w64 \
           qt5multimedia-mingw-w64
       defs: -DCMAKE_TOOLCHAIN_FILE="$(Build.SourcesDirectory)/CMakeModules/MinGWCross.cmake"
-      cross: ${{true}}
+      cross: true
     MacOS:
       imageName: "macos-10.14"
       generator: "Ninja"
@@ -59,7 +59,7 @@ strategy:
       generator: "Visual Studio 16 2019"
       deps: ""
       defs: ""
-      cross: ${{false}}
+      cross: false
     Windows-MinGW:
       imageName: "windows-latest"
       generator: "MSYS Makefiles"
@@ -68,7 +68,7 @@ strategy:
         "$(Agent.ToolsDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
         "$(Agent.ToolsDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
       defs: -DCMAKE_MAKE_PROGRAM="$(Agent.ToolsDirectory)/msys2/usr/bin/make"
-      cross: ${{false}}
+      cross: false
   maxParallel: 5
 
 pool:
@@ -90,7 +90,7 @@ steps:
 - script: ctest -C $(config)
   displayName: Test
   workingDirectory: build
-  condition: not(variables.cross)
+  condition: eq(variables.cross, 'false')
 - task: PublishPipelineArtifact@1
   displayName: Publish
   inputs:
