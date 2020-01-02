@@ -6,7 +6,6 @@ variables:
 
 strategy:
   matrix:
-
     Linux:
       imageName: "ubuntu-18.04"
       generator: "Ninja"
@@ -24,7 +23,6 @@ strategy:
           libavformat-dev \
           libswscale-dev \
           ninja-build
-
     Linux-MinGW:
       imageName: "ubuntu-18.04"
       generator: "Ninja"
@@ -44,7 +42,6 @@ strategy:
           qt5multimedia-mingw-w64
       defs: -DCMAKE_TOOLCHAIN_FILE="$(Build.SourcesDirectory)/CMakeModules/MinGWCross.cmake"
       run_tests: false
-
     MacOS:
       imageName: "macos-10.14"
       generator: "Ninja"
@@ -54,7 +51,6 @@ strategy:
         brew install sdl2 qt ffmpeg ninja
         pip3 install mac
       defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
-
     Windows-MSVC:
       imageName: "windows-2019"
       generator: "Visual Studio 16 2019"
@@ -63,7 +59,6 @@ strategy:
       run_tests: true
       shell: ""
       shell_end: ""
-
     Windows-MinGW:
       imageName: "windows-2019"
       generator: "MSYS Makefiles"
