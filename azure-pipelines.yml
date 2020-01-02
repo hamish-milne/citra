@@ -64,10 +64,10 @@ strategy:
       imageName: "windows-latest"
       generator: "MSYS Makefiles"
       deps: |
-        git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.ToolsDirectory)/msys2"
-        "$(Agent.ToolsDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
-        "$(Agent.ToolsDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
-      defs: -DCMAKE_MAKE_PROGRAM="$(Agent.ToolsDirectory)/msys2/usr/bin/make"
+        git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.BuildDirectory)/msys2"
+        "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
+        "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
+      defs: -DCMAKE_MAKE_PROGRAM="$(Agent.BuildDirectory)/msys2/usr/bin/make"
       cross: false
   maxParallel: 5
 
