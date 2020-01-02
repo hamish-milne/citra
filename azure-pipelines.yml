@@ -3,6 +3,7 @@ trigger:
 
 variables:
   config: Release
+  generator: "Ninja"
   deps: ""
   defs: ""
   run_tests: true
@@ -14,7 +15,6 @@ strategy:
 
     Linux:
       imageName: "ubuntu-18.04"
-      generator: "Ninja"
       deps: |
         sudo apt-get -y update
         sudo apt-get -y install \
@@ -32,7 +32,6 @@ strategy:
 
     Linux-MinGW:
       imageName: "ubuntu-18.04"
-      generator: "Ninja"
       deps: |
         sudo apt-key adv --keyserver keyserver.ubuntu.com --recv '72931B477E22FEFD47F8DECE02FE5F12ADDE29B2'
         sudo add-apt-repository http://ppa.launchpad.net/tobydox/mingw-w64/ubuntu
@@ -52,7 +51,6 @@ strategy:
 
     MacOS:
       imageName: "macos-10.14"
-      generator: "Ninja"
       deps: |
         brew update
         brew unlink python@2
@@ -66,11 +64,10 @@ strategy:
 
     Windows-MinGW:
       imageName: "windows-2019"
-      generator: "MSYS Makefiles"
       deps: |
         git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.BuildDirectory)/msys2"
         "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
-        "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} cmake make
+        "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} cmake ninja
       cmake_shell: "\"$(Agent.BuildDirectory)/msys2/usr/bin/bash\" -lc '"
       shell_end: "'"
 
@@ -84,6 +81,7 @@ steps:
     mkdir build
     $(deps)
   displayName: Dependencies
+  condition: and(succeeded(), ne(variables.deps, ''))
 - script: $(cmake_shell) cmake .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
   displayName: Configure
   workingDirectory: build
