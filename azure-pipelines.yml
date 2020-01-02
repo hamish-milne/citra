@@ -3,9 +3,15 @@ trigger:
 
 variables:
   config: Release
+  deps: ""
+  defs: ""
+  run_tests: true
+  cmake_shell: ""
+  shell_end: ""
 
 strategy:
   matrix:
+
     Linux:
       imageName: "ubuntu-18.04"
       generator: "Ninja"
@@ -23,6 +29,7 @@ strategy:
           libavformat-dev \
           libswscale-dev \
           ninja-build
+
     Linux-MinGW:
       imageName: "ubuntu-18.04"
       generator: "Ninja"
@@ -42,6 +49,7 @@ strategy:
           qt5multimedia-mingw-w64
       defs: -DCMAKE_TOOLCHAIN_FILE="$(Build.SourcesDirectory)/CMakeModules/MinGWCross.cmake"
       run_tests: false
+
     MacOS:
       imageName: "macos-10.14"
       generator: "Ninja"
@@ -51,20 +59,19 @@ strategy:
         brew install sdl2 qt ffmpeg ninja
         pip3 install mac
       defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
+
     Windows-MSVC:
       imageName: "windows-2019"
       generator: "Visual Studio 16 2019"
-      deps: ""
-      defs: ""
-      run_tests: true
+
     Windows-MinGW:
       imageName: "windows-2019"
       generator: "MSYS Makefiles"
       deps: |
         git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.BuildDirectory)/msys2"
         "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
-        "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
-      shell: "\"$(Agent.BuildDirectory)/msys2/usr/bin/bash\" -lc '"
+        "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} cmake make
+      cmake_shell: "\"$(Agent.BuildDirectory)/msys2/usr/bin/bash\" -lc '"
       shell_end: "'"
 
 pool:
@@ -77,10 +84,10 @@ steps:
     mkdir build
     $(deps)
   displayName: Dependencies
-- script: $(shell) cmake .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
+- script: $(cmake_shell) cmake .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
   displayName: Configure
   workingDirectory: build
-- script: $(shell) cmake --build . --config $(config) $(shell_end)
+- script: $(cmake_shell) cmake --build . --config $(config) $(shell_end)
   displayName: Build
   workingDirectory: build
 - script: ctest -C $(config)
