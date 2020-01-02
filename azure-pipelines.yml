@@ -24,7 +24,7 @@ strategy:
           libswscale-dev \
           ninja-build
       defs: ""
-      cross: 0
+      cross: ${{false}}
     Linux-MinGW:
       imageName: "ubuntu-18.04"
       generator: "Ninja"
@@ -43,7 +43,7 @@ strategy:
           libsamplerate-mingw-w64 \
           qt5multimedia-mingw-w64
       defs: -DCMAKE_TOOLCHAIN_FILE="$(Build.SourcesDirectory)/CMakeModules/MinGWCross.cmake"
-      cross: 1
+      cross: ${{true}}
     MacOS:
       imageName: "macos-10.14"
       generator: "Ninja"
@@ -59,16 +59,16 @@ strategy:
       generator: "Visual Studio 16 2019"
       deps: ""
       defs: ""
-      cross: 0
+      cross: ${{false}}
     Windows-MinGW:
       imageName: "windows-latest"
       generator: "MSYS Makefiles"
       deps: |
         git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.ToolsDirectory)/msys2"
-        "$(Agent.ToolsDirectory)/msys2/usr/bin/pacman" -Syyuu
-        "$(Agent.ToolsDirectory)/msys2/usr/bin/pacman" -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
+        "$(Agent.ToolsDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
+        "$(Agent.ToolsDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
       defs: -DCMAKE_MAKE_PROGRAM="$(Agent.ToolsDirectory)/msys2/usr/bin/make"
-      cross: 0
+      cross: ${{false}}
   maxParallel: 5
 
 pool:
@@ -77,7 +77,7 @@ pool:
 steps:
 - checkout: self
   submodules: recursive
-- bash: $(deps)
+- script: $(deps)
   displayName: Dependencies
 - task: CMake@1
   displayName: Configure
