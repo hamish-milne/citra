@@ -3,11 +3,6 @@ trigger:
 
 variables:
   config: Release
-  deps: ""
-  defs: ""
-  run_tests: true
-  shell: ""
-  shell_end: ""
 
 strategy:
   matrix:
@@ -63,6 +58,11 @@ strategy:
     Windows-MSVC:
       imageName: "windows-2019"
       generator: "Visual Studio 16 2019"
+      deps: ""
+      defs: ""
+      run_tests: true
+      shell: ""
+      shell_end: ""
 
     Windows-MinGW:
       imageName: "windows-2019"
