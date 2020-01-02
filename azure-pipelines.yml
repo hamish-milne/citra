@@ -65,10 +65,8 @@ strategy:
       generator: "MSYS Makefiles"
       deps: |
         choco install msys2
-        C:/tools/msys64/usr/bin/bash -lc "update-core"
-        C:/tools/msys64/usr/bin/bash -lc "pacman-key --init"
-        C:/tools/msys64/usr/bin/bash -lc "pacman -Syu"
-        C:/tools/msys64/usr/bin/bash -lc "pacman -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make"
+        C:/tools/msys64/usr/bin/pacman -Syuu
+        C:/tools/msys64/usr/bin/pacman -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
       defs: ""
       cross: True
   maxParallel: 5
