@@ -84,7 +84,7 @@ steps:
     mkdir build
     $(deps)
   displayName: Dependencies
-- script: $(cmake_shell) cmake "-B$(Build.SourcesDirectory)" "-H$(Build.SourcesDirectory)/build" -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
+- script: $(cmake_shell) cmake "-H$(Build.SourcesDirectory)" "-B$(Build.SourcesDirectory)/build" -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
   displayName: Configure
 - script: $(cmake_shell) cmake --build "$(Build.SourcesDirectory)/build" --config $(config) $(shell_end)
   displayName: Build
