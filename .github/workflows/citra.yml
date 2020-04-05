@@ -1,19 +1,18 @@
 on: [push, pull_request]
 jobs:
   Citra:
+    env:
+      config: Release
+      # Tell msys2 to add mingw64 to the path
+      MSYSTEM: MINGW64
+      # Tell msys2 to inherit the current directory when starting the shell
+      CHERE_INVOKING: 1
     strategy:
       matrix:
-        build-config: [Release]
-        name: [Linux, Linux-MinGW, MacOS, Windows-MSVC, Windows-MinGW]
-        generator: [Ninja]
-        deps: [""]
-        defs: [""]
-        run-tests: [true]
-        cmake_shell: [""]
-        shell_end: [""]
-        include:
+        config:
           - name: Linux
-            runs-on: "ubuntu-18.04"
+            os: "ubuntu-18.04"
+            generator: Ninja
             deps: |
               sudo apt-get -y update
               sudo apt-get -y install \
@@ -30,7 +29,8 @@ jobs:
                 libswscale-dev \
                 ninja-build
           - name: Linux-MinGW
-            runs-on: "ubuntu-18.04"
+            os: "ubuntu-18.04"
+            generator: Ninja
             deps: |
               sudo apt-key adv --keyserver keyserver.ubuntu.com --recv '72931B477E22FEFD47F8DECE02FE5F12ADDE29B2'
               sudo add-apt-repository http://ppa.launchpad.net/tobydox/mingw-w64/ubuntu
@@ -46,37 +46,34 @@ jobs:
                 qt5tools-mingw-w64 \
                 libsamplerate-mingw-w64 \
                 qt5multimedia-mingw-w64
-              defs: -DCMAKE_TOOLCHAIN_FILE="$(Build.SourcesDirectory)/CMakeModules/MinGWCross.cmake"
-              run_tests: false
+            defs: -DCMAKE_TOOLCHAIN_FILE="$(Build.SourcesDirectory)/CMakeModules/MinGWCross.cmake"
+            run_tests: false
 
           - name: MacOS
-            runs-on: "macos-10.14"
+            os: "macos-10.14"
+            generator: Ninja
             deps: |
               brew update
               brew unlink python@2
               brew install sdl2 qt ffmpeg ninja
               pip3 install mac
-              defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
+            defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
 
           - name: Windows-MSVC
-            runs-on: "windows-2019"
+            os: "windows-2019"
             generator: "Visual Studio 16 2019"
 
           - name: Windows-MinGW
-            runs-on: "windows-2019"
+            os: "windows-2019"
             generator: "MSYS Makefiles"
-            # Tell msys2 to add mingw64 to the path
-            MSYSTEM: MINGW64
-            # Tell msys2 to inherit the current directory when starting the shell
-            CHERE_INVOKING: 1
             deps: |
-              git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.BuildDirectory)/msys2"
-              "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
-              "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
-            cmake_shell: "\"$(Agent.BuildDirectory)/msys2/usr/bin/bash\" -lc '"
+              git clone https://github.com/msys2/msys2-ci-base.git "${{github.workspace}}/msys2"
+              "${{github.workspace}}/msys2/usr/bin/pacman" --noconfirm -Syyuu
+              "${{github.workspace}}/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
+            cmake_shell: "\"${{github.workspace}}/msys2/usr/bin/bash\" -lc '"
             shell_end: "'"
   
-    runs-on: ${{matrix.runs-on}}
+    runs-on: ${{matrix.os}}
     name: ${{matrix.name}}
 
     steps:
@@ -87,13 +84,13 @@ jobs:
           mkdir build
           ${{matrix.deps}}
         name: Dependencies
-      - run: ${{matrix.cmake_shell}} cmake .. -G "${{matrix.generator}}" -DCMAKE_BUILD_TYPE=${{matrix.build-config}} ${{matrix.defs}} ${{matrix.shell_end}}
+      - run: ${{matrix.cmake_shell}} cmake .. -G "${{matrix.generator}}" -DCMAKE_BUILD_TYPE=${{env.config}} ${{matrix.defs}} ${{matrix.shell_end}}
         name: Configure
         working-directory: build
-      - run: ${{matrix.cmake_shell}} cmake --build . --config ${{matrix.build-config}} ${{matrix.shell_end}}
+      - run: ${{matrix.cmake_shell}} cmake --build . --config ${{env.config}} ${{matrix.shell_end}}
         name: Build
         working-directory: build
-      - run: ctest -C ${{matrix.build-config}}
+      - run: ctest -C ${{env.config}}
         name: Test
         working-directory: build
         if: success() && matrix.run_tests
