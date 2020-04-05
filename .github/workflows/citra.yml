@@ -89,12 +89,11 @@ jobs:
           mkdir build
           ${{matrix.config.deps}}
         name: Dependencies
-      - run: >
-          ${{matrix.config.cmake_shell}} cmake .. -G "${{matrix.config.generator}}"
-            -DCMAKE_BUILD_TYPE=${{env.config}}
-            -DBUILD_REPOSITORY=${{github.repository}}
-            -DBUILD_TAG=${{github.ref}}
-            ${{matrix.config.defs}} ${{matrix.config.shell_end}}
+      - run: ${{matrix.config.cmake_shell}} cmake .. -G "${{matrix.config.generator}}"
+          -DCMAKE_BUILD_TYPE=${{env.config}}
+          -DBUILD_REPOSITORY=${{github.repository}}
+          -DBUILD_TAG=${{github.ref}}
+          ${{matrix.config.defs}} ${{matrix.config.shell_end}}
         name: Configure
         working-directory: build
       - run: ${{matrix.config.cmake_shell}} cmake --build . --config ${{env.config}} ${{matrix.config.shell_end}}
