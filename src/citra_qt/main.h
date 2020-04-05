@@ -32,6 +32,7 @@ class GraphicsVertexShaderWidget;
 class GRenderWindow;
 class IPCRecorderWidget;
 class LLEServiceModulesWidget;
+class LoadingScreen;
 class MicroProfileDialog;
 class MultiplayerState;
 class ProfilerWidget;
@@ -75,6 +76,7 @@ public:
 
 public slots:
     void OnAppFocusStateChanged(Qt::ApplicationState state);
+    void OnLoadComplete();
 
 signals:
 
@@ -167,6 +169,7 @@ private slots:
     void OnGameListOpenFolder(u64 program_id, GameListOpenTarget target);
     void OnGameListNavigateToGamedbEntry(u64 program_id,
                                          const CompatibilityList& compatibility_list);
+    void OnGameListDumpRomFS(QString game_path, u64 program_id);
     void OnGameListOpenDirectory(const QString& directory);
     void OnGameListAddDirectory();
     void OnGameListShowList(bool show);
@@ -187,6 +190,7 @@ private slots:
     void ChangeScreenLayout();
     void ToggleScreenLayout();
     void OnSwapScreens();
+    void OnRotateScreens();
     void OnCheats();
     void ShowFullscreen();
     void HideFullscreen();
@@ -196,8 +200,10 @@ private slots:
     void OnPlayMovie();
     void OnStopRecordingPlayback();
     void OnCaptureScreenshot();
+#ifdef ENABLE_FFMPEG_VIDEO_DUMPER
     void OnStartVideoDumping();
     void OnStopVideoDumping();
+#endif
     void OnCoreError(Core::System::ResultStatus, std::string);
     /// Called whenever a user selects Help->About Citra
     void OnMenuAboutCitra();
@@ -220,6 +226,7 @@ private:
     GRenderWindow* render_window;
 
     GameListPlaceholder* game_list_placeholder;
+    LoadingScreen* loading_screen;
 
     // Status bar elements
     QProgressBar* progress_bar = nullptr;
@@ -251,6 +258,8 @@ private:
     QString video_dumping_path;
     // Whether game shutdown is delayed due to video dumping
     bool game_shutdown_delayed = false;
+    // Whether game was paused due to stopping video dumping
+    bool game_paused_for_dumping = false;
 
     // Debugger panes
     ProfilerWidget* profilerWidget;

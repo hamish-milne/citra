@@ -62,6 +62,21 @@ elseif(ENABLE_FFMPEG_AUDIO_DECODER)
         target_include_directories(audio_core PRIVATE ${FFMPEG_DIR}/include)
     endif()
     target_compile_definitions(audio_core PUBLIC HAVE_FFMPEG)
+elseif(ENABLE_FDK)
+    target_sources(audio_core PRIVATE
+        hle/fdk_decoder.cpp
+        hle/fdk_decoder.h
+    )
+    target_link_libraries(audio_core PRIVATE ${FDK_AAC})
+    target_compile_definitions(audio_core PUBLIC HAVE_FDK)
+endif()
+
+if(ANDROID)
+    target_sources(audio_core PRIVATE
+        hle/mediandk_decoder.cpp
+        hle/mediandk_decoder.h
+    )
+    target_link_libraries(audio_core PRIVATE mediandk)
 endif()
 
 if(SDL2_FOUND)
@@ -73,4 +88,3 @@ if(ENABLE_CUBEB)
     target_link_libraries(audio_core PRIVATE cubeb)
     target_compile_definitions(audio_core PUBLIC HAVE_CUBEB)
 endif()
-

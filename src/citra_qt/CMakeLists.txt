@@ -115,6 +115,9 @@ add_executable(citra-qt
     game_list_worker.h
     hotkeys.cpp
     hotkeys.h
+    loading_screen.cpp
+    loading_screen.h
+    loading_screen.ui
     main.cpp
     main.h
     main.ui
@@ -158,6 +161,20 @@ add_executable(citra-qt
     util/util.cpp
     util/util.h
 )
+
+if (ENABLE_FFMPEG_VIDEO_DUMPER)
+    target_sources(citra-qt PRIVATE
+        dumping/dumping_dialog.cpp
+        dumping/dumping_dialog.h
+        dumping/dumping_dialog.ui
+        dumping/option_set_dialog.cpp
+        dumping/option_set_dialog.h
+        dumping/option_set_dialog.ui
+        dumping/options_dialog.cpp
+        dumping/options_dialog.h
+        dumping/options_dialog.ui
+    )
+endif()
 
 file(GLOB COMPAT_LIST
      ${PROJECT_BINARY_DIR}/dist/compatibility_list/compatibility_list.qrc
@@ -241,6 +258,10 @@ target_compile_definitions(citra-qt PRIVATE
 
     # Disable implicit QString->QUrl conversions to enforce use of proper resolving functions.
     -DQT_NO_URL_CAST_FROM_STRING
+
+    # Disable implicit conversions from/to C strings
+    -DQT_NO_CAST_FROM_ASCII
+    -DQT_NO_CAST_TO_ASCII
 )
 
 if (CITRA_ENABLE_COMPATIBILITY_REPORTING)

@@ -35,6 +35,8 @@ CMAKE_DEPENDENT_OPTION(ENABLE_MF "Use Media Foundation decoder (preferred over F
 
 CMAKE_DEPENDENT_OPTION(COMPILE_WITH_DWARF "Add DWARF debugging information" ON "MINGW" OFF)
 
+CMAKE_DEPENDENT_OPTION(ENABLE_FDK "Use FDK AAC decoder" OFF "NOT ENABLE_FFMPEG_AUDIO_DECODER;NOT ENABLE_MF" OFF)
+
 if(NOT EXISTS ${PROJECT_SOURCE_DIR}/.git/hooks/pre-commit)
     message(STATUS "Copying pre-commit hook")
     file(COPY hooks/pre-commit
@@ -142,7 +144,7 @@ if (ENABLE_SDL2)
     if (CITRA_USE_BUNDLED_SDL2)
         # Detect toolchain and platform
         if ((MSVC_VERSION GREATER_EQUAL 1910 AND MSVC_VERSION LESS 1930) AND ARCHITECTURE_x86_64)
-            set(SDL2_VER "SDL2-2.0.8")
+            set(SDL2_VER "SDL2-2.0.10")
         else()
             message(FATAL_ERROR "No bundled SDL2 binaries for your toolchain. Disable CITRA_USE_BUNDLED_SDL2 and provide your own.")
         endif()
@@ -223,6 +225,12 @@ if (ENABLE_FFMPEG_VIDEO_DUMPER)
     add_definitions(-DENABLE_FFMPEG_VIDEO_DUMPER)
 endif()
 
+if (ENABLE_FDK)
+    find_library(FDK_AAC fdk-aac DOC "The path to fdk_aac library")
+    if(FDK_AAC STREQUAL "FDK_AAC-NOTFOUND")
+        message(FATAL_ERROR "fdk_aac library not found.")
+    endif()
+endif()
 # Platform-specific library requirements
 # ======================================
 

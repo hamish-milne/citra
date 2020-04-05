@@ -57,7 +57,7 @@ const std::array<std::array<int, 5>, Settings::NativeAnalog::NumAnalogs> Config:
 // This must be in alphabetical order according to action name as it must have the same order as
 // UISetting::values.shortcuts, which is alphabetically ordered.
 // clang-format off
-const std::array<UISettings::Shortcut, 20> default_hotkeys{
+const std::array<UISettings::Shortcut, 21> default_hotkeys{
     {{QStringLiteral("Advance Frame"),            QStringLiteral("Main Window"), {QStringLiteral("\\"), Qt::ApplicationShortcut}},
      {QStringLiteral("Capture Screenshot"),       QStringLiteral("Main Window"), {QStringLiteral("Ctrl+P"), Qt::ApplicationShortcut}},
      {QStringLiteral("Continue/Pause Emulation"), QStringLiteral("Main Window"), {QStringLiteral("F4"), Qt::WindowShortcut}},
@@ -70,6 +70,7 @@ const std::array<UISettings::Shortcut, 20> default_hotkeys{
      {QStringLiteral("Load File"),                QStringLiteral("Main Window"), {QStringLiteral("Ctrl+O"), Qt::WindowShortcut}},
      {QStringLiteral("Remove Amiibo"),            QStringLiteral("Main Window"), {QStringLiteral("F3"), Qt::ApplicationShortcut}},
      {QStringLiteral("Restart Emulation"),        QStringLiteral("Main Window"), {QStringLiteral("F6"), Qt::WindowShortcut}},
+     {QStringLiteral("Rotate Screens Upright"),   QStringLiteral("Main Window"), {QStringLiteral("F8"), Qt::WindowShortcut}},
      {QStringLiteral("Stop Emulation"),           QStringLiteral("Main Window"), {QStringLiteral("F5"), Qt::WindowShortcut}},
      {QStringLiteral("Swap Screens"),             QStringLiteral("Main Window"), {QStringLiteral("F9"), Qt::WindowShortcut}},
      {QStringLiteral("Toggle Filter Bar"),        QStringLiteral("Main Window"), {QStringLiteral("Ctrl+F"), Qt::WindowShortcut}},
@@ -92,6 +93,7 @@ void Config::ReadValues() {
     ReadMiscellaneousValues();
     ReadDebuggingValues();
     ReadWebServiceValues();
+    ReadVideoDumpingValues();
     ReadUIValues();
     ReadUtilityValues();
 }
@@ -115,7 +117,8 @@ void Config::ReadAudioValues() {
     Settings::values.mic_input_type = static_cast<Settings::MicInputType>(
         ReadSetting(QStringLiteral("mic_input_type"), 0).toInt());
     Settings::values.mic_input_device =
-        ReadSetting(QStringLiteral("mic_input_device"), Frontend::Mic::default_device_name)
+        ReadSetting(QStringLiteral("mic_input_device"),
+                    QString::fromUtf8(Frontend::Mic::default_device_name))
             .toString()
             .toStdString();
 
@@ -234,11 +237,15 @@ void Config::ReadControlValues() {
 }
 
 void Config::ReadUtilityValues() {
-    qt_config->beginGroup("Utility");
+    qt_config->beginGroup(QStringLiteral("Utility"));
 
-    Settings::values.dump_textures = ReadSetting("dump_textures", false).toBool();
-    Settings::values.custom_textures = ReadSetting("custom_textures", false).toBool();
-    Settings::values.preload_textures = ReadSetting("preload_textures", false).toBool();
+    Settings::values.dump_textures = ReadSetting(QStringLiteral("dump_textures"), false).toBool();
+    Settings::values.custom_textures =
+        ReadSetting(QStringLiteral("custom_textures"), false).toBool();
+    Settings::values.preload_textures =
+        ReadSetting(QStringLiteral("preload_textures"), false).toBool();
+    Settings::values.use_disk_shader_cache =
+        ReadSetting(QStringLiteral("use_disk_shader_cache"), true).toBool();
 
     qt_config->endGroup();
 }
@@ -247,6 +254,8 @@ void Config::ReadCoreValues() {
     qt_config->beginGroup(QStringLiteral("Core"));
 
     Settings::values.use_cpu_jit = ReadSetting(QStringLiteral("use_cpu_jit"), true).toBool();
+    Settings::values.cpu_clock_percentage =
+        ReadSetting(QStringLiteral("cpu_clock_percentage"), 100).toInt();
 
     qt_config->endGroup();
 }
@@ -295,6 +304,7 @@ void Config::ReadLayoutValues() {
     Settings::values.layout_option =
         static_cast<Settings::LayoutOption>(ReadSetting(QStringLiteral("layout_option")).toInt());
     Settings::values.swap_screen = ReadSetting(QStringLiteral("swap_screen"), false).toBool();
+    Settings::values.upright_screen = ReadSetting(QStringLiteral("upright_screen"), false).toBool();
     Settings::values.custom_layout = ReadSetting(QStringLiteral("custom_layout"), false).toBool();
     Settings::values.custom_top_left = ReadSetting(QStringLiteral("custom_top_left"), 0).toInt();
     Settings::values.custom_top_top = ReadSetting(QStringLiteral("custom_top_top"), 0).toInt();
@@ -441,6 +451,11 @@ void Config::ReadRendererValues() {
     Settings::values.bg_green = ReadSetting(QStringLiteral("bg_green"), 0.0).toFloat();
     Settings::values.bg_blue = ReadSetting(QStringLiteral("bg_blue"), 0.0).toFloat();
 
+    Settings::values.texture_filter_name =
+        ReadSetting(QStringLiteral("texture_filter_name"), QStringLiteral("none"))
+            .toString()
+            .toStdString();
+
     qt_config->endGroup();
 }
 
@@ -466,7 +481,7 @@ void Config::ReadShortcutValues() {
 void Config::ReadSystemValues() {
     qt_config->beginGroup(QStringLiteral("System"));
 
-    Settings::values.is_new_3ds = ReadSetting(QStringLiteral("is_new_3ds"), false).toBool();
+    Settings::values.is_new_3ds = ReadSetting(QStringLiteral("is_new_3ds"), true).toBool();
     Settings::values.region_value =
         ReadSetting(QStringLiteral("region_value"), Settings::REGION_VALUE_AUTO_SELECT).toInt();
     Settings::values.init_clock = static_cast<Settings::InitClock>(
@@ -474,6 +489,49 @@ void Config::ReadSystemValues() {
             .toInt());
     Settings::values.init_time =
         ReadSetting(QStringLiteral("init_time"), 946681277ULL).toULongLong();
+
+    qt_config->endGroup();
+}
+
+// Options for variable bit rate live streaming taken from here:
+// https://developers.google.com/media/vp9/live-encoding
+const QString DEFAULT_VIDEO_ENCODER_OPTIONS =
+    QStringLiteral("quality:realtime,speed:6,tile-columns:4,frame-parallel:1,threads:8,row-mt:1");
+const QString DEFAULT_AUDIO_ENCODER_OPTIONS = QString{};
+
+void Config::ReadVideoDumpingValues() {
+    qt_config->beginGroup(QStringLiteral("VideoDumping"));
+
+    Settings::values.output_format =
+        ReadSetting(QStringLiteral("output_format"), QStringLiteral("webm"))
+            .toString()
+            .toStdString();
+    Settings::values.format_options =
+        ReadSetting(QStringLiteral("format_options")).toString().toStdString();
+
+    Settings::values.video_encoder =
+        ReadSetting(QStringLiteral("video_encoder"), QStringLiteral("libvpx-vp9"))
+            .toString()
+            .toStdString();
+
+    Settings::values.video_encoder_options =
+        ReadSetting(QStringLiteral("video_encoder_options"), DEFAULT_VIDEO_ENCODER_OPTIONS)
+            .toString()
+            .toStdString();
+
+    Settings::values.video_bitrate =
+        ReadSetting(QStringLiteral("video_bitrate"), 2500000).toULongLong();
+
+    Settings::values.audio_encoder =
+        ReadSetting(QStringLiteral("audio_encoder"), QStringLiteral("libvorbis"))
+            .toString()
+            .toStdString();
+    Settings::values.audio_encoder_options =
+        ReadSetting(QStringLiteral("audio_encoder_options"), DEFAULT_AUDIO_ENCODER_OPTIONS)
+            .toString()
+            .toStdString();
+    Settings::values.audio_bitrate =
+        ReadSetting(QStringLiteral("audio_bitrate"), 64000).toULongLong();
 
     qt_config->endGroup();
 }
@@ -610,6 +668,7 @@ void Config::SaveValues() {
     SaveMiscellaneousValues();
     SaveDebuggingValues();
     SaveWebServiceValues();
+    SaveVideoDumpingValues();
     SaveUIValues();
     SaveUtilityValues();
 }
@@ -629,7 +688,7 @@ void Config::SaveAudioValues() {
     WriteSetting(QStringLiteral("volume"), Settings::values.volume, 1.0f);
     WriteSetting(QStringLiteral("mic_input_device"),
                  QString::fromStdString(Settings::values.mic_input_device),
-                 Frontend::Mic::default_device_name);
+                 QString::fromUtf8(Frontend::Mic::default_device_name));
     WriteSetting(QStringLiteral("mic_input_type"),
                  static_cast<int>(Settings::values.mic_input_type), 0);
 
@@ -708,11 +767,13 @@ void Config::SaveControlValues() {
 }
 
 void Config::SaveUtilityValues() {
-    qt_config->beginGroup("Utility");
+    qt_config->beginGroup(QStringLiteral("Utility"));
 
-    WriteSetting("dump_textures", Settings::values.dump_textures, false);
-    WriteSetting("custom_textures", Settings::values.custom_textures, false);
-    WriteSetting("preload_textures", Settings::values.preload_textures, false);
+    WriteSetting(QStringLiteral("dump_textures"), Settings::values.dump_textures, false);
+    WriteSetting(QStringLiteral("custom_textures"), Settings::values.custom_textures, false);
+    WriteSetting(QStringLiteral("preload_textures"), Settings::values.preload_textures, false);
+    WriteSetting(QStringLiteral("use_disk_shader_cache"), Settings::values.use_disk_shader_cache,
+                 true);
 
     qt_config->endGroup();
 }
@@ -721,6 +782,8 @@ void Config::SaveCoreValues() {
     qt_config->beginGroup(QStringLiteral("Core"));
 
     WriteSetting(QStringLiteral("use_cpu_jit"), Settings::values.use_cpu_jit, true);
+    WriteSetting(QStringLiteral("cpu_clock_percentage"), Settings::values.cpu_clock_percentage,
+                 100);
 
     qt_config->endGroup();
 }
@@ -763,6 +826,7 @@ void Config::SaveLayoutValues() {
     WriteSetting(QStringLiteral("filter_mode"), Settings::values.filter_mode, true);
     WriteSetting(QStringLiteral("layout_option"), static_cast<int>(Settings::values.layout_option));
     WriteSetting(QStringLiteral("swap_screen"), Settings::values.swap_screen, false);
+    WriteSetting(QStringLiteral("upright_screen"), Settings::values.upright_screen, false);
     WriteSetting(QStringLiteral("custom_layout"), Settings::values.custom_layout, false);
     WriteSetting(QStringLiteral("custom_top_left"), Settings::values.custom_top_left, 0);
     WriteSetting(QStringLiteral("custom_top_top"), Settings::values.custom_top_top, 0);
@@ -869,6 +933,10 @@ void Config::SaveRendererValues() {
     WriteSetting(QStringLiteral("bg_green"), (double)Settings::values.bg_green, 0.0);
     WriteSetting(QStringLiteral("bg_blue"), (double)Settings::values.bg_blue, 0.0);
 
+    WriteSetting(QStringLiteral("texture_filter_name"),
+                 QString::fromStdString(Settings::values.texture_filter_name),
+                 QStringLiteral("none"));
+
     qt_config->endGroup();
 }
 
@@ -894,13 +962,40 @@ void Config::SaveShortcutValues() {
 void Config::SaveSystemValues() {
     qt_config->beginGroup(QStringLiteral("System"));
 
-    WriteSetting(QStringLiteral("is_new_3ds"), Settings::values.is_new_3ds, false);
+    WriteSetting(QStringLiteral("is_new_3ds"), Settings::values.is_new_3ds, true);
     WriteSetting(QStringLiteral("region_value"), Settings::values.region_value,
                  Settings::REGION_VALUE_AUTO_SELECT);
     WriteSetting(QStringLiteral("init_clock"), static_cast<u32>(Settings::values.init_clock),
                  static_cast<u32>(Settings::InitClock::SystemTime));
     WriteSetting(QStringLiteral("init_time"),
                  static_cast<unsigned long long>(Settings::values.init_time), 946681277ULL);
+
+    qt_config->endGroup();
+}
+
+void Config::SaveVideoDumpingValues() {
+    qt_config->beginGroup(QStringLiteral("VideoDumping"));
+
+    WriteSetting(QStringLiteral("output_format"),
+                 QString::fromStdString(Settings::values.output_format), QStringLiteral("webm"));
+    WriteSetting(QStringLiteral("format_options"),
+                 QString::fromStdString(Settings::values.format_options));
+    WriteSetting(QStringLiteral("video_encoder"),
+                 QString::fromStdString(Settings::values.video_encoder),
+                 QStringLiteral("libvpx-vp9"));
+    WriteSetting(QStringLiteral("video_encoder_options"),
+                 QString::fromStdString(Settings::values.video_encoder_options),
+                 DEFAULT_VIDEO_ENCODER_OPTIONS);
+    WriteSetting(QStringLiteral("video_bitrate"),
+                 static_cast<unsigned long long>(Settings::values.video_bitrate), 2500000);
+    WriteSetting(QStringLiteral("audio_encoder"),
+                 QString::fromStdString(Settings::values.audio_encoder),
+                 QStringLiteral("libvorbis"));
+    WriteSetting(QStringLiteral("audio_encoder_options"),
+                 QString::fromStdString(Settings::values.audio_encoder_options),
+                 DEFAULT_AUDIO_ENCODER_OPTIONS);
+    WriteSetting(QStringLiteral("audio_bitrate"),
+                 static_cast<unsigned long long>(Settings::values.audio_bitrate), 64000);
 
     qt_config->endGroup();
 }
@@ -997,7 +1092,7 @@ QVariant Config::ReadSetting(const QString& name) const {
 
 QVariant Config::ReadSetting(const QString& name, const QVariant& default_value) const {
     QVariant result;
-    if (qt_config->value(name + "/default", false).toBool()) {
+    if (qt_config->value(name + QStringLiteral("/default"), false).toBool()) {
         result = default_value;
     } else {
         result = qt_config->value(name, default_value);
@@ -1011,7 +1106,7 @@ void Config::WriteSetting(const QString& name, const QVariant& value) {
 
 void Config::WriteSetting(const QString& name, const QVariant& value,
                           const QVariant& default_value) {
-    qt_config->setValue(name + "/default", value == default_value);
+    qt_config->setValue(name + QStringLiteral("/default"), value == default_value);
     qt_config->setValue(name, value);
 }
 

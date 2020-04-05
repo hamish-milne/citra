@@ -117,6 +117,20 @@
         </item>
        </layout>
       </item>
+      <item>
+       <layout class="QHBoxLayout" name="horizontalLayout_3">
+        <item>
+         <widget class="QLabel" name="label_5">
+          <property name="text">
+           <string>Texture Filter</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="texture_filter_combobox"/>
+        </item>
+       </layout>
+      </item>
      </layout>
     </widget>
    </item>
@@ -150,6 +164,11 @@
           <item>
            <property name="text">
             <string>Anaglyph</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Interlaced</string>
            </property>
           </item>
          </widget>
@@ -235,6 +254,13 @@
        </widget>
       </item>
       <item>
+       <widget class="QCheckBox" name="upright_screen">
+        <property name="text">
+         <string>Rotate Screens Upright</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <layout class="QHBoxLayout" name="horizontalLayout_6">
         <item>
          <widget class="QLabel" name="bg_label">
@@ -264,6 +290,13 @@
       <string>Utility</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_8">
+      <item>
+       <widget class="QCheckBox" name="toggle_disk_shader_cache">
+        <property name="text">
+         <string>Use Disk Shader Cache</string>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QCheckBox" name="toggle_custom_textures">
         <property name="toolTip">

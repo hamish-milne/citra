@@ -32,7 +32,7 @@ enum class MicInputType {
     Static,
 };
 
-enum class StereoRenderOption { Off, SideBySide, Anaglyph };
+enum class StereoRenderOption { Off, SideBySide, Anaglyph, Interlaced };
 
 namespace NativeButton {
 enum Values {
@@ -128,6 +128,7 @@ struct Values {
 
     // Core
     bool use_cpu_jit;
+    int cpu_clock_percentage;
 
     // Data Storage
     bool use_virtual_sd;
@@ -141,14 +142,17 @@ struct Values {
     bool use_gles;
     bool use_hw_renderer;
     bool use_hw_shader;
+    bool use_disk_shader_cache;
     bool shaders_accurate_mul;
     bool use_shader_jit;
     u16 resolution_factor;
     bool use_frame_limit;
     u16 frame_limit;
+    std::string texture_filter_name;
 
     LayoutOption layout_option;
     bool swap_screen;
+    bool upright_screen;
     bool custom_layout;
     u16 custom_top_left;
     u16 custom_top_top;
@@ -202,6 +206,18 @@ struct Values {
     std::string web_api_url;
     std::string citra_username;
     std::string citra_token;
+
+    // Video Dumping
+    std::string output_format;
+    std::string format_options;
+
+    std::string video_encoder;
+    std::string video_encoder_options;
+    u64 video_bitrate;
+
+    std::string audio_encoder;
+    std::string audio_encoder_options;
+    u64 audio_bitrate;
 } extern values;
 
 // a special value for Values::region_value indicating that citra will automatically select a region

@@ -7,6 +7,10 @@
 #include "audio_core/hle/wmf_decoder.h"
 #elif HAVE_FFMPEG
 #include "audio_core/hle/ffmpeg_decoder.h"
+#elif ANDROID
+#include "audio_core/hle/mediandk_decoder.h"
+#elif HAVE_FDK
+#include "audio_core/hle/fdk_decoder.h"
 #endif
 #include "audio_core/hle/common.h"
 #include "audio_core/hle/decoder.h"
@@ -97,6 +101,10 @@ DspHle::Impl::Impl(DspHle& parent_, Memory::MemorySystem& memory) : parent(paren
     decoder = std::make_unique<HLE::WMFDecoder>(memory);
 #elif defined(HAVE_FFMPEG)
     decoder = std::make_unique<HLE::FFMPEGDecoder>(memory);
+#elif ANDROID
+    decoder = std::make_unique<HLE::MediaNDKDecoder>(memory);
+#elif defined(HAVE_FDK)
+    decoder = std::make_unique<HLE::FDKDecoder>(memory);
 #else
     LOG_WARNING(Audio_DSP, "No decoder found, this could lead to missing audio");
     decoder = std::make_unique<HLE::NullDecoder>();
@@ -396,7 +404,7 @@ bool DspHle::Impl::Tick() {
     // shared memory region)
     current_frame = GenerateCurrentFrame();
 
-    parent.OutputFrame(current_frame);
+    parent.OutputFrame(std::move(current_frame));
 
     return true;
 }

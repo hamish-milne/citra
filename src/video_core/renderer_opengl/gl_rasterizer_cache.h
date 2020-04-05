@@ -26,13 +26,14 @@
 #include "common/common_types.h"
 #include "common/math_util.h"
 #include "core/custom_tex_cache.h"
-#include "core/hw/gpu.h"
-#include "video_core/regs_framebuffer.h"
-#include "video_core/regs_texturing.h"
 #include "video_core/renderer_opengl/gl_resource_manager.h"
+#include "video_core/renderer_opengl/gl_surface_params.h"
 #include "video_core/texture/texture_decode.h"
 
 namespace OpenGL {
+
+class RasterizerCacheOpenGL;
+class TextureFilterer;
 
 struct TextureCubeConfig {
     PAddr px;
@@ -76,15 +77,16 @@ struct hash<OpenGL::TextureCubeConfig> {
 
 namespace OpenGL {
 
-struct CachedSurface;
-using Surface = std::shared_ptr<CachedSurface>;
 using SurfaceSet = std::set<Surface>;
 
-using SurfaceRegions = boost::icl::interval_set<PAddr>;
-using SurfaceMap = boost::icl::interval_map<PAddr, Surface>;
-using SurfaceCache = boost::icl::interval_map<PAddr, SurfaceSet>;
+using SurfaceRegions = boost::icl::interval_set<PAddr, std::less, SurfaceInterval>;
+using SurfaceMap =
+    boost::icl::interval_map<PAddr, Surface, boost::icl::partial_absorber, std::less,
+                             boost::icl::inplace_plus, boost::icl::inter_section, SurfaceInterval>;
+using SurfaceCache =
+    boost::icl::interval_map<PAddr, SurfaceSet, boost::icl::partial_absorber, std::less,
+                             boost::icl::inplace_plus, boost::icl::inter_section, SurfaceInterval>;
 
-using SurfaceInterval = SurfaceCache::interval_type;
 static_assert(std::is_same<SurfaceRegions::interval_type, SurfaceCache::interval_type>() &&
                   std::is_same<SurfaceMap::interval_type, SurfaceCache::interval_type>(),
               "incorrect interval types");
@@ -98,208 +100,6 @@ enum class ScaleMatch {
     Exact,   // only accept same res scale
     Upscale, // only allow higher scale than params
     Ignore   // accept every scaled res
-};
-
-struct SurfaceParams {
-    enum class PixelFormat {
-        // First 5 formats are shared between textures and color buffers
-        RGBA8 = 0,
-        RGB8 = 1,
-        RGB5A1 = 2,
-        RGB565 = 3,
-        RGBA4 = 4,
-
-        // Texture-only formats
-        IA8 = 5,
-        RG8 = 6,
-        I8 = 7,
-        A8 = 8,
-        IA4 = 9,
-        I4 = 10,
-        A4 = 11,
-        ETC1 = 12,
-        ETC1A4 = 13,
-
-        // Depth buffer-only formats
-        D16 = 14,
-        // gap
-        D24 = 16,
-        D24S8 = 17,
-
-        Invalid = 255,
-    };
-
-    enum class SurfaceType {
-        Color = 0,
-        Texture = 1,
-        Depth = 2,
-        DepthStencil = 3,
-        Fill = 4,
-        Invalid = 5
-    };
-
-    static constexpr unsigned int GetFormatBpp(PixelFormat format) {
-        constexpr std::array<unsigned int, 18> bpp_table = {
-            32, // RGBA8
-            24, // RGB8
-            16, // RGB5A1
-            16, // RGB565
-            16, // RGBA4
-            16, // IA8
-            16, // RG8
-            8,  // I8
-            8,  // A8
-            8,  // IA4
-            4,  // I4
-            4,  // A4
-            4,  // ETC1
-            8,  // ETC1A4
-            16, // D16
-            0,
-            24, // D24
-            32, // D24S8
-        };
-
-        assert(static_cast<std::size_t>(format) < bpp_table.size());
-        return bpp_table[static_cast<std::size_t>(format)];
-    }
-    unsigned int GetFormatBpp() const {
-        return GetFormatBpp(pixel_format);
-    }
-
-    static PixelFormat PixelFormatFromTextureFormat(Pica::TexturingRegs::TextureFormat format) {
-        return ((unsigned int)format < 14) ? (PixelFormat)format : PixelFormat::Invalid;
-    }
-
-    static PixelFormat PixelFormatFromColorFormat(Pica::FramebufferRegs::ColorFormat format) {
-        return ((unsigned int)format < 5) ? (PixelFormat)format : PixelFormat::Invalid;
-    }
-
-    static PixelFormat PixelFormatFromDepthFormat(Pica::FramebufferRegs::DepthFormat format) {
-        return ((unsigned int)format < 4) ? (PixelFormat)((unsigned int)format + 14)
-                                          : PixelFormat::Invalid;
-    }
-
-    static PixelFormat PixelFormatFromGPUPixelFormat(GPU::Regs::PixelFormat format) {
-        switch (format) {
-        // RGB565 and RGB5A1 are switched in PixelFormat compared to ColorFormat
-        case GPU::Regs::PixelFormat::RGB565:
-            return PixelFormat::RGB565;
-        case GPU::Regs::PixelFormat::RGB5A1:
-            return PixelFormat::RGB5A1;
-        default:
-            return ((unsigned int)format < 5) ? (PixelFormat)format : PixelFormat::Invalid;
-        }
-    }
-
-    static bool CheckFormatsBlittable(PixelFormat pixel_format_a, PixelFormat pixel_format_b) {
-        SurfaceType a_type = GetFormatType(pixel_format_a);
-        SurfaceType b_type = GetFormatType(pixel_format_b);
-
-        if ((a_type == SurfaceType::Color || a_type == SurfaceType::Texture) &&
-            (b_type == SurfaceType::Color || b_type == SurfaceType::Texture)) {
-            return true;
-        }
-
-        if (a_type == SurfaceType::Depth && b_type == SurfaceType::Depth) {
-            return true;
-        }
-
-        if (a_type == SurfaceType::DepthStencil && b_type == SurfaceType::DepthStencil) {
-            return true;
-        }
-
-        return false;
-    }
-
-    static constexpr SurfaceType GetFormatType(PixelFormat pixel_format) {
-        if ((unsigned int)pixel_format < 5) {
-            return SurfaceType::Color;
-        }
-
-        if ((unsigned int)pixel_format < 14) {
-            return SurfaceType::Texture;
-        }
-
-        if (pixel_format == PixelFormat::D16 || pixel_format == PixelFormat::D24) {
-            return SurfaceType::Depth;
-        }
-
-        if (pixel_format == PixelFormat::D24S8) {
-            return SurfaceType::DepthStencil;
-        }
-
-        return SurfaceType::Invalid;
-    }
-
-    /// Update the params "size", "end" and "type" from the already set "addr", "width", "height"
-    /// and "pixel_format"
-    void UpdateParams() {
-        if (stride == 0) {
-            stride = width;
-        }
-        type = GetFormatType(pixel_format);
-        size = !is_tiled ? BytesInPixels(stride * (height - 1) + width)
-                         : BytesInPixels(stride * 8 * (height / 8 - 1) + width * 8);
-        end = addr + size;
-    }
-
-    SurfaceInterval GetInterval() const {
-        return SurfaceInterval::right_open(addr, end);
-    }
-
-    // Returns the outer rectangle containing "interval"
-    SurfaceParams FromInterval(SurfaceInterval interval) const;
-
-    SurfaceInterval GetSubRectInterval(Common::Rectangle<u32> unscaled_rect) const;
-
-    // Returns the region of the biggest valid rectange within interval
-    SurfaceInterval GetCopyableInterval(const Surface& src_surface) const;
-
-    u32 GetScaledWidth() const {
-        return width * res_scale;
-    }
-
-    u32 GetScaledHeight() const {
-        return height * res_scale;
-    }
-
-    Common::Rectangle<u32> GetRect() const {
-        return {0, height, width, 0};
-    }
-
-    Common::Rectangle<u32> GetScaledRect() const {
-        return {0, GetScaledHeight(), GetScaledWidth(), 0};
-    }
-
-    u32 PixelsInBytes(u32 size) const {
-        return size * CHAR_BIT / GetFormatBpp(pixel_format);
-    }
-
-    u32 BytesInPixels(u32 pixels) const {
-        return pixels * GetFormatBpp(pixel_format) / CHAR_BIT;
-    }
-
-    bool ExactMatch(const SurfaceParams& other_surface) const;
-    bool CanSubRect(const SurfaceParams& sub_surface) const;
-    bool CanExpand(const SurfaceParams& expanded_surface) const;
-    bool CanTexCopy(const SurfaceParams& texcopy_params) const;
-
-    Common::Rectangle<u32> GetSubRect(const SurfaceParams& sub_surface) const;
-    Common::Rectangle<u32> GetScaledSubRect(const SurfaceParams& sub_surface) const;
-
-    PAddr addr = 0;
-    PAddr end = 0;
-    u32 size = 0;
-
-    u32 width = 0;
-    u32 height = 0;
-    u32 stride = 0;
-    u16 res_scale = 1;
-
-    bool is_tiled = false;
-    PixelFormat pixel_format = PixelFormat::Invalid;
-    SurfaceType type = SurfaceType::Invalid;
 };
 
 /**
@@ -337,6 +137,8 @@ private:
 };
 
 struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface> {
+    CachedSurface(RasterizerCacheOpenGL& owner) : owner{owner} {}
+
     bool CanFill(const SurfaceParams& dest_surface, SurfaceInterval fill_interval) const;
     bool CanCopy(const SurfaceParams& dest_surface, SurfaceInterval copy_interval) const;
 
@@ -374,21 +176,18 @@ struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface
                          : SurfaceParams::GetFormatBpp(format) / 8;
     }
 
-    std::unique_ptr<u8[]> gl_buffer;
-    std::size_t gl_buffer_size = 0;
+    std::vector<u8> gl_buffer;
 
     // Read/Write data in 3DS memory to/from gl_buffer
     void LoadGLBuffer(PAddr load_start, PAddr load_end);
     void FlushGLBuffer(PAddr flush_start, PAddr flush_end);
 
     // Custom texture loading and dumping
-    bool LoadCustomTexture(u64 tex_hash, Core::CustomTexInfo& tex_info,
-                           Common::Rectangle<u32>& custom_rect);
+    bool LoadCustomTexture(u64 tex_hash, Core::CustomTexInfo& tex_info);
     void DumpTexture(GLuint target_tex, u64 tex_hash);
 
     // Upload/Download data in gl_buffer in/to this surface's texture
-    void UploadGLTexture(const Common::Rectangle<u32>& rect, GLuint read_fb_handle,
-                         GLuint draw_fb_handle);
+    void UploadGLTexture(Common::Rectangle<u32> rect, GLuint read_fb_handle, GLuint draw_fb_handle);
     void DownloadGLTexture(const Common::Rectangle<u32>& rect, GLuint read_fb_handle,
                            GLuint draw_fb_handle);
 
@@ -417,6 +216,7 @@ struct CachedSurface : SurfaceParams, std::enable_shared_from_this<CachedSurface
     }
 
 private:
+    RasterizerCacheOpenGL& owner;
     std::list<std::weak_ptr<SurfaceWatcher>> watchers;
 };
 
@@ -514,7 +314,21 @@ private:
     OGLProgram d24s8_abgr_shader;
     GLint d24s8_abgr_tbo_size_u_id;
     GLint d24s8_abgr_viewport_u_id;
+    u16 resolution_scale_factor;
 
     std::unordered_map<TextureCubeConfig, CachedTextureCube> texture_cube_cache;
+
+public:
+    std::unique_ptr<TextureFilterer> texture_filterer;
 };
+
+struct FormatTuple {
+    GLint internal_format;
+    GLenum format;
+    GLenum type;
+};
+
+constexpr FormatTuple tex_tuple = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
+
+const FormatTuple& GetFormatTuple(SurfaceParams::PixelFormat pixel_format);
 } // namespace OpenGL
