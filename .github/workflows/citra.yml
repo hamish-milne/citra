@@ -13,6 +13,7 @@ jobs:
           - name: Linux
             os: "ubuntu-18.04"
             generator: Ninja
+            defs: -DCMAKE_MAKE_PROGRAM=ninja
             deps: |
               sudo apt-get -y update
               sudo apt-get -y install \
@@ -46,7 +47,7 @@ jobs:
                 qt5tools-mingw-w64 \
                 libsamplerate-mingw-w64 \
                 qt5multimedia-mingw-w64
-            defs: -DCMAKE_TOOLCHAIN_FILE="$(Build.SourcesDirectory)/CMakeModules/MinGWCross.cmake"
+            defs: -DCMAKE_MAKE_PROGRAM=ninja -DCMAKE_TOOLCHAIN_FILE="${{github.workspace}}/CMakeModules/MinGWCross.cmake"
             run_tests: false
 
 #           - name: MacOS
