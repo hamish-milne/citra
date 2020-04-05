@@ -1,0 +1,106 @@
+on: [push, pull_request]
+jobs:
+  Citra:
+    strategy:
+      matrix:
+        name: [Linux, Linux-MinGW, MacOS, Windows-MSVC, Windows-MinGW]
+        include:
+          - name: Linux
+            runs-on: "ubuntu-18.04"
+            deps: |
+              sudo apt-get -y update
+              sudo apt-get -y install \
+                cmake \
+                build-essential \
+                libsdl2-dev \
+                qtbase5-dev \
+                libqt5opengl5-dev \
+                qtmultimedia5-dev \
+                qttools5-dev \
+                qttools5-dev-tools \
+                libavcodec-dev \
+                libavformat-dev \
+                libswscale-dev \
+                ninja-build
+          - name: Linux-MinGW
+            runs-on: "ubuntu-18.04"
+            deps: |
+              sudo apt-key adv --keyserver keyserver.ubuntu.com --recv '72931B477E22FEFD47F8DECE02FE5F12ADDE29B2'
+              sudo add-apt-repository http://ppa.launchpad.net/tobydox/mingw-w64/ubuntu
+              sudo apt-get -y update
+              sudo apt-get -y install \
+                cmake \
+                g++-mingw-w64-x86-64 \
+                gcc-mingw-w64-x86-64 \
+                mingw-w64-tools \
+                ninja-build \
+                sdl2-mingw-w64 \
+                qt5base-mingw-w64 \
+                qt5tools-mingw-w64 \
+                libsamplerate-mingw-w64 \
+                qt5multimedia-mingw-w64
+              defs: -DCMAKE_TOOLCHAIN_FILE="$(Build.SourcesDirectory)/CMakeModules/MinGWCross.cmake"
+              run_tests: false
+
+          - name: MacOS
+            runs-on: "macos-10.14"
+            deps: |
+              brew update
+              brew unlink python@2
+              brew install sdl2 qt ffmpeg ninja
+              pip3 install mac
+              defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
+
+          - name: Windows-MSVC
+            runs-on: "windows-2019"
+            generator: "Visual Studio 16 2019"
+
+          - name: Windows-MinGW
+            runs-on: "windows-2019"
+            generator: "MSYS Makefiles"
+            # Tell msys2 to add mingw64 to the path
+            MSYSTEM: MINGW64
+            # Tell msys2 to inherit the current directory when starting the shell
+            CHERE_INVOKING: 1
+            deps: |
+              git clone https://github.com/msys2/msys2-ci-base.git "$(Agent.BuildDirectory)/msys2"
+              "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -Syyuu
+              "$(Agent.BuildDirectory)/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
+            cmake_shell: "\"$(Agent.BuildDirectory)/msys2/usr/bin/bash\" -lc '"
+            shell_end: "'"
+  
+    runs-on: ${{matrix.runs-on}}
+    name: ${{matrix.name}}
+    
+    env:
+      config: Release
+      generator: ${{matrix.generator}} || "Ninja"
+      deps: ${{matrix.deps}}
+      defs: ${{matrix.defs}}
+      run_tests: ${{matrix.run_tests}} || true
+      cmake_shell: ${{matrix.cmake_shell}}
+      shell_end: ${{matrix.shell_end}}
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - run: |
+          mkdir build
+          $(deps)
+        name: Dependencies
+      - run: $(cmake_shell) cmake .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
+        name: Configure
+        working-directory: build
+      - run: $(cmake_shell) cmake --build . --config $(config) $(shell_end)
+        name: Build
+        working-directory: build
+      - run: ctest -C $(config)
+        name: Test
+        working-directory: build
+        if: success() && env.run_tests == true
+      - uses: actions/upload-artifact@v1
+        name: Publish
+        with:
+          name: ${{matrix.name}}
+          path: build/bin
