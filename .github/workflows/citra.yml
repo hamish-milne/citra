@@ -50,29 +50,29 @@ jobs:
             defs: -DCMAKE_MAKE_PROGRAM=ninja -DCMAKE_TOOLCHAIN_FILE="../CMakeModules/MinGWCross.cmake"
             run_tests: false
 
-#           - name: MacOS
-#             os: "macos-10.14"
-#             generator: Ninja
-#             deps: |
-#               brew update
-#               brew unlink python@2
-#               brew install sdl2 qt ffmpeg ninja
-#               pip3 install mac
-#             defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
+          - name: MacOS
+            os: "macos-10.14"
+            generator: Ninja
+            deps: |
+              brew update
+              brew unlink python@2
+              brew install sdl2 qt ffmpeg ninja
+              pip3 install mac
+            defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
 
-#           - name: Windows-MSVC
-#             os: "windows-2019"
-#             generator: "Visual Studio 16 2019"
+          - name: Windows-MSVC
+            os: "windows-2019"
+            generator: "Visual Studio 16 2019"
 
-#           - name: Windows-MinGW
-#             os: "windows-2019"
-#             generator: "MSYS Makefiles"
-#             deps: |
-#               git clone https://github.com/msys2/msys2-ci-base.git "${{github.workspace}}/msys2"
-#               "${{github.workspace}}/msys2/usr/bin/pacman" --noconfirm -Syyuu
-#               "${{github.workspace}}/msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
-#             cmake_shell: "\"${{github.workspace}}/msys2/usr/bin/bash\" -lc '"
-#             shell_end: "'"
+          - name: Windows-MinGW
+            os: "windows-2019"
+            generator: "MSYS Makefiles"
+            deps: |
+              git clone https://github.com/msys2/msys2-ci-base.git "./msys2"
+              "./msys2/usr/bin/pacman" --noconfirm -Syyuu
+              "./msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
+            cmake_shell: "\"../msys2/usr/bin/bash\" -lc '"
+            shell_end: "'"
   
     runs-on: ${{matrix.config.os}}
     name: ${{matrix.config.name}}
