@@ -73,8 +73,8 @@ jobs:
 #             cmake_shell: "\"${{github.workspace}}/msys2/usr/bin/bash\" -lc '"
 #             shell_end: "'"
   
-    runs-on: ${{matrix.os}}
-    name: ${{matrix.name}}
+    runs-on: ${{matrix.config.os}}
+    name: ${{matrix.config.name}}
 
     steps:
       - uses: actions/checkout@v2
@@ -82,12 +82,12 @@ jobs:
           submodules: recursive
       - run: |
           mkdir build
-          ${{matrix.deps}}
+          ${{matrix.config.deps}}
         name: Dependencies
-      - run: ${{matrix.cmake_shell}} cmake .. -G "${{matrix.generator}}" -DCMAKE_BUILD_TYPE=${{env.config}} ${{matrix.defs}} ${{matrix.shell_end}}
+      - run: ${{matrix.config.cmake_shell}} cmake .. -G "${{matrix.config.generator}}" -DCMAKE_BUILD_TYPE=${{env.config}} ${{matrix.config.defs}} ${{matrix.config.shell_end}}
         name: Configure
         working-directory: build
-      - run: ${{matrix.cmake_shell}} cmake --build . --config ${{env.config}} ${{matrix.shell_end}}
+      - run: ${{matrix.config.cmake_shell}} cmake --build . --config ${{env.config}} ${{matrix.config.shell_end}}
         name: Build
         working-directory: build
       - run: ctest -C ${{env.config}}
@@ -97,5 +97,5 @@ jobs:
       - uses: actions/upload-artifact@v1
         name: Publish
         with:
-          name: ${{matrix.name}}
+          name: ${{matrix.config.name}}
           path: build/bin
