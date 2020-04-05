@@ -47,7 +47,7 @@ jobs:
                 qt5tools-mingw-w64 \
                 libsamplerate-mingw-w64 \
                 qt5multimedia-mingw-w64
-            defs: -DCMAKE_MAKE_PROGRAM=ninja -DCMAKE_TOOLCHAIN_FILE="${{github.workspace}}/CMakeModules/MinGWCross.cmake"
+            defs: -DCMAKE_MAKE_PROGRAM=ninja -DCMAKE_TOOLCHAIN_FILE="../CMakeModules/MinGWCross.cmake"
             run_tests: false
 
 #           - name: MacOS
