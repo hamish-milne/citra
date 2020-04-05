@@ -3,7 +3,14 @@ jobs:
   Citra:
     strategy:
       matrix:
+        build-config: [Release]
         name: [Linux, Linux-MinGW, MacOS, Windows-MSVC, Windows-MinGW]
+        generator: [Ninja]
+        deps: [""]
+        defs: [""]
+        run-tests: [true]
+        cmake_shell: [""]
+        shell_end: [""]
         include:
           - name: Linux
             runs-on: "ubuntu-18.04"
@@ -71,15 +78,6 @@ jobs:
   
     runs-on: ${{matrix.runs-on}}
     name: ${{matrix.name}}
-    
-    env:
-      config: Release
-      generator: ${{matrix.generator}} || "Ninja"
-      deps: ${{matrix.deps}}
-      defs: ${{matrix.defs}}
-      run_tests: ${{matrix.run_tests}} || true
-      cmake_shell: ${{matrix.cmake_shell}}
-      shell_end: ${{matrix.shell_end}}
 
     steps:
       - uses: actions/checkout@v2
@@ -87,18 +85,18 @@ jobs:
           submodules: recursive
       - run: |
           mkdir build
-          $(deps)
+          ${{matrix.deps}}
         name: Dependencies
-      - run: $(cmake_shell) cmake .. -G "$(generator)" -DCMAKE_BUILD_TYPE=$(config) $(defs) $(shell_end)
+      - run: ${{matrix.cmake_shell}} cmake .. -G "${{matrix.generator}}" -DCMAKE_BUILD_TYPE=${{matrix.build-config}} ${{matrix.defs}} ${{matrix.shell_end}}
         name: Configure
         working-directory: build
-      - run: $(cmake_shell) cmake --build . --config $(config) $(shell_end)
+      - run: ${{matrix.cmake_shell}} cmake --build . --config ${{matrix.build-config}} ${{matrix.shell_end}}
         name: Build
         working-directory: build
-      - run: ctest -C $(config)
+      - run: ctest -C ${{matrix.build-config}}
         name: Test
         working-directory: build
-        if: success() && env.run_tests == true
+        if: success() && matrix.run_tests
       - uses: actions/upload-artifact@v1
         name: Publish
         with:
