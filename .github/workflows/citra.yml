@@ -29,6 +29,7 @@ jobs:
                 libavformat-dev \
                 libswscale-dev \
                 ninja-build
+            run_tests: true
           - name: Linux-MinGW
             os: "ubuntu-18.04"
             generator: Ninja
@@ -59,20 +60,23 @@ jobs:
               brew install sdl2 qt ffmpeg ninja
               pip3 install mac
             defs: -DQt5_DIR=/usr/local/opt/qt/lib/cmake/Qt5
+            run_tests: true
 
           - name: Windows-MSVC
             os: "windows-2019"
             generator: "Visual Studio 16 2019"
+            run_tests: true
 
           - name: Windows-MinGW
             os: "windows-2019"
             generator: "MSYS Makefiles"
             deps: |
               git clone https://github.com/msys2/msys2-ci-base.git "./msys2"
-              "./msys2/usr/bin/pacman" --noconfirm -Syyuu
-              "./msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
+              &"./msys2/usr/bin/pacman" --noconfirm -Syyuu
+              &"./msys2/usr/bin/pacman" --noconfirm -S mingw-w64-x86_64-{gcc,SDL2,qt5,cmake} make
             cmake_shell: "\"../msys2/usr/bin/bash\" -lc '"
             shell_end: "'"
+            run_tests: true
   
     runs-on: ${{matrix.config.os}}
     name: ${{matrix.config.name}}
