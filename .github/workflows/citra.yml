@@ -13,7 +13,7 @@ jobs:
           - name: Linux
             os: "ubuntu-18.04"
             generator: Ninja
-            defs: -DCMAKE_MAKE_PROGRAM=ninja
+            defs: -DCMAKE_MAKE_PROGRAM=ninja -DCOMPILE_WITH_DWARF=OFF
             deps: |
               sudo apt-get -y update
               sudo apt-get -y install \
@@ -102,7 +102,7 @@ jobs:
       - run: ctest -C ${{env.config}}
         name: Test
         working-directory: build
-        if: success() && matrix.run_tests
+        if: matrix.run_tests
       - uses: actions/upload-artifact@v1
         name: Publish
         with:
