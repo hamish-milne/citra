@@ -64,12 +64,7 @@ jobs:
 
           - name: Windows-MSVC
             os: "windows-2019"
-            generator: Ninja
-            enter_shell: |
-              $VsInstallPath="C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise"
-              Import-Module "$VsInstallPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
-              Enter-VsDevShell -VsInstallPath $VsInstallPath
-            defs: -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER=cl
+            generator: "Visual Studio 16 2019"
             run_tests: true
 
           - name: Windows-MinGW
