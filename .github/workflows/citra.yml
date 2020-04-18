@@ -69,6 +69,7 @@ jobs:
               $VsInstallPath="C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise"
               Import-Module "$VsInstallPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
               Enter-VsDevShell -VsInstallPath $VsInstallPath
+            defs: -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER=cl
             run_tests: true
 
           - name: Windows-MinGW
