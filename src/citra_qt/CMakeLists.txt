@@ -285,7 +285,7 @@ if(UNIX AND NOT APPLE)
     install(TARGETS citra-qt RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
 endif()
 
-if (WIN32)
+if (WIN32 AND NOT UNIX)
     include(CopyCitraQt5Deps)
     include(CopyCitraSDLDeps)
     copy_citra_Qt5_deps(citra-qt)
