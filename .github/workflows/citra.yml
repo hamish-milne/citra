@@ -74,7 +74,7 @@ jobs:
               git clone https://github.com/msys2/msys2-ci-base.git "./msys2"
               &"./msys2/usr/bin/pacman" --noconfirm -Syyuu
               &"./msys2/usr/bin/pacman" --noconfirm -S "mingw-w64-x86_64-{gcc,SDL2,qt5,cmake,ffmpeg}" make
-            defs: '-j3'
+            build_flags: -j3
             cmake_shell: '&"../msys2/usr/bin/bash" -lc "'
             shell_end: '"'
             run_tests: true
@@ -105,7 +105,7 @@ jobs:
         working-directory: build
       - run: |
           ${{matrix.config.enter_shell}}
-          ${{matrix.config.cmake_shell}} cmake --build . --config ${{env.config}} ${{matrix.config.shell_end}}
+          ${{matrix.config.cmake_shell}} cmake --build . --config ${{env.config}} ${{matrix.config.shell_end}} -- ${{matrix.config.build_flags}}
         name: Build
         working-directory: build
       - run: ctest -C ${{env.config}}
