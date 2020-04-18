@@ -756,7 +756,7 @@ bool RasterizerOpenGL::Draw(bool accelerate, bool is_indexed) {
                 state.texture_units[texture_index].texture_2d = default_texture;
             }
         } else {
-            state.texture_units[texture_index].texture_2d = default_texture;
+            state.texture_units[texture_index].texture_2d = 0;
         }
     }
 
@@ -1365,6 +1365,10 @@ void RasterizerOpenGL::FlushAndInvalidateRegion(PAddr addr, u32 size) {
     MICROPROFILE_SCOPE(OpenGL_CacheManagement);
     res_cache.FlushRegion(addr, size);
     res_cache.InvalidateRegion(addr, size, nullptr);
+}
+
+void RasterizerOpenGL::ClearAll(bool flush) {
+    res_cache.ClearAll(flush);
 }
 
 bool RasterizerOpenGL::AccelerateDisplayTransfer(const GPU::Regs::DisplayTransferConfig& config) {

@@ -2,6 +2,9 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <boost/serialization/shared_ptr.hpp>
+#include <boost/serialization/vector.hpp>
+#include "common/archives.h"
 #include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
@@ -26,7 +29,24 @@
 #include "core/hw/aes/ccm.h"
 #include "core/hw/aes/key.h"
 
+SERVICE_CONSTRUCT_IMPL(Service::APT::Module)
+
 namespace Service::APT {
+
+template <class Archive>
+void Module::serialize(Archive& ar, const unsigned int) {
+    ar& shared_font_mem;
+    ar& shared_font_loaded;
+    ar& shared_font_relocated;
+    ar& lock;
+    ar& cpu_percent;
+    ar& unknown_ns_state_field;
+    ar& screen_capture_buffer;
+    ar& screen_capture_post_permission;
+    ar& applet_manager;
+}
+
+SERIALIZE_IMPL(Module)
 
 Module::NSInterface::NSInterface(std::shared_ptr<Module> apt, const char* name, u32 max_session)
     : ServiceFramework(name, max_session), apt(std::move(apt)) {}
@@ -648,6 +668,37 @@ void Module::APTInterface::CloseLibraryApplet(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(apt->applet_manager->CloseLibraryApplet(std::move(object), std::move(buffer)));
+}
+
+void Module::APTInterface::LoadSysMenuArg(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x36, 1, 0); // 0x00360040
+    const auto size = std::min(std::size_t{rp.Pop<u32>()}, SysMenuArgSize);
+
+    // This service function does not clear the buffer.
+
+    std::vector<u8> buffer(size);
+    std::copy_n(apt->sys_menu_arg_buffer.cbegin(), size, buffer.begin());
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 2);
+    rb.Push(RESULT_SUCCESS);
+    rb.PushStaticBuffer(std::move(buffer), 0);
+
+    LOG_DEBUG(Service_APT, "called");
+}
+
+void Module::APTInterface::StoreSysMenuArg(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x37, 1, 2); // 0x00370042
+    const auto size = std::min(std::size_t{rp.Pop<u32>()}, SysMenuArgSize);
+    const auto& buffer = rp.PopStaticBuffer();
+
+    ASSERT_MSG(buffer.size() >= size, "Buffer too small to hold requested data");
+
+    std::copy_n(buffer.cbegin(), size, apt->sys_menu_arg_buffer.begin());
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(RESULT_SUCCESS);
+
+    LOG_DEBUG(Service_APT, "called");
 }
 
 void Module::APTInterface::SendCaptureBufferInfo(Kernel::HLERequestContext& ctx) {

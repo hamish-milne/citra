@@ -9,6 +9,7 @@
 #include <cryptopp/aes.h>
 #include <cryptopp/modes.h>
 #include <fmt/format.h>
+#include "common/common_paths.h"
 #include "common/file_util.h"
 #include "common/logging/log.h"
 #include "common/string_util.h"
@@ -373,6 +374,37 @@ InstallStatus InstallCIA(const std::string& path,
         installFile.Close();
 
         LOG_INFO(Service_AM, "Installed {} successfully.", path);
+
+        const FileUtil::DirectoryEntryCallable callback =
+            [&callback](u64* num_entries_out, const std::string& directory,
+                        const std::string& virtual_name) -> bool {
+            const std::string physical_name = directory + DIR_SEP + virtual_name;
+            const bool is_dir = FileUtil::IsDirectory(physical_name);
+            if (!is_dir) {
+                std::unique_ptr<Loader::AppLoader> loader = Loader::GetLoader(physical_name);
+                if (!loader) {
+                    return true;
+                }
+
+                bool executable = false;
+                const auto res = loader->IsExecutable(executable);
+                if (res == Loader::ResultStatus::ErrorEncrypted) {
+                    return false;
+                }
+                return true;
+            } else {
+                return FileUtil::ForeachDirectoryEntry(nullptr, physical_name, callback);
+            }
+        };
+        if (!FileUtil::ForeachDirectoryEntry(
+                nullptr,
+                GetTitlePath(
+                    Service::AM::GetTitleMediaType(container.GetTitleMetadata().GetTitleID()),
+                    container.GetTitleMetadata().GetTitleID()),
+                callback)) {
+            LOG_ERROR(Service_AM, "CIA {} contained encrypted files.", path);
+            return InstallStatus::ErrorEncrypted;
+        }
         return InstallStatus::Success;
     }
 
@@ -1021,7 +1053,7 @@ void Module::Interface::BeginImportProgram(Kernel::HLERequestContext& ctx) {
     // Citra will store contents out to sdmc/nand
     const FileSys::Path cia_path = {};
     auto file = std::make_shared<Service::FS::File>(
-        am->system, std::make_unique<CIAFile>(media_type), cia_path);
+        am->kernel, std::make_unique<CIAFile>(media_type), cia_path);
 
     am->cia_installing = true;
 
@@ -1048,7 +1080,7 @@ void Module::Interface::BeginImportProgramTemporarily(Kernel::HLERequestContext&
     // contents out to sdmc/nand
     const FileSys::Path cia_path = {};
     auto file = std::make_shared<Service::FS::File>(
-        am->system, std::make_unique<CIAFile>(FS::MediaType::NAND), cia_path);
+        am->kernel, std::make_unique<CIAFile>(FS::MediaType::NAND), cia_path);
 
     am->cia_installing = true;
 
@@ -1450,10 +1482,12 @@ void Module::Interface::GetMetaDataFromCia(Kernel::HLERequestContext& ctx) {
     rb.PushMappedBuffer(output_buffer);
 }
 
-Module::Module(Core::System& system) : system(system) {
+Module::Module(Core::System& system) : kernel(system.Kernel()) {
     ScanForAllTitles();
     system_updater_mutex = system.Kernel().CreateMutex(false, "AM::SystemUpdaterMutex");
 }
+
+Module::Module(Kernel::KernelSystem& kernel) : kernel(kernel) {}
 
 Module::~Module() = default;
 

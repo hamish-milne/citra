@@ -4,11 +4,14 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
 #include <vector>
+#include "common/archives.h"
 #include "common/common_funcs.h"
 #include "common/common_types.h"
 #include "common/swap.h"
+#include "core/global.h"
 #include "core/hle/kernel/kernel.h"
 #include "core/hle/service/service.h"
 
@@ -42,6 +45,8 @@ struct CaptureBufferInfo {
 };
 static_assert(sizeof(CaptureBufferInfo) == 0x20, "CaptureBufferInfo struct has incorrect size");
 
+constexpr std::size_t SysMenuArgSize = 0x40;
+
 enum class StartupArgumentType : u32 {
     OtherApp = 0,
     Restart = 1,
@@ -65,7 +70,7 @@ public:
         NSInterface(std::shared_ptr<Module> apt, const char* name, u32 max_session);
         ~NSInterface();
 
-    private:
+    protected:
         std::shared_ptr<Module> apt;
     };
 
@@ -519,6 +524,32 @@ public:
         void CloseLibraryApplet(Kernel::HLERequestContext& ctx);
 
         /**
+         * APT::LoadSysMenuArg service function
+         *  Inputs:
+         *      0 : Command header [0x00360040]
+         *      1 : Buffer size
+         *  Outputs:
+         *      0 : Header code
+         *      1 : Result code
+         *     64 : Size << 14 | 2
+         *     65 : void* Output Buffer
+         */
+        void LoadSysMenuArg(Kernel::HLERequestContext& ctx);
+
+        /**
+         * APT::StoreSysMenuArg service function
+         *  Inputs:
+         *      0 : Command header [0x00370042]
+         *      1 : Buffer size
+         *      2 : (Size << 14) | 2
+         *      3 : Input buffer virtual address
+         *  Outputs:
+         *      0 : Header code
+         *      1 : Result code
+         */
+        void StoreSysMenuArg(Kernel::HLERequestContext& ctx);
+
+        /**
          * APT::SendCaptureBufferInfo service function
          *  Inputs:
          *      0 : Command header [0x00400042]
@@ -601,9 +632,16 @@ public:
          */
         void CheckNew3DS(Kernel::HLERequestContext& ctx);
 
-    private:
+    protected:
         bool application_reset_prepared{};
         std::shared_ptr<Module> apt;
+
+    private:
+        template <class Archive>
+        void serialize(Archive& ar, const unsigned int) {
+            ar& application_reset_prepared;
+        }
+        friend class boost::serialization::access;
     };
 
 private:
@@ -625,13 +663,20 @@ private:
     u8 unknown_ns_state_field = 0;
 
     std::vector<u8> screen_capture_buffer;
+    std::array<u8, SysMenuArgSize> sys_menu_arg_buffer;
 
     ScreencapPostPermission screen_capture_post_permission =
         ScreencapPostPermission::CleanThePermission; // TODO(JamePeng): verify the initial value
 
     std::shared_ptr<AppletManager> applet_manager;
+
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned int);
+    friend class boost::serialization::access;
 };
 
 void InstallInterfaces(Core::System& system);
 
 } // namespace Service::APT
+
+SERVICE_CONSTRUCT(Service::APT::Module)

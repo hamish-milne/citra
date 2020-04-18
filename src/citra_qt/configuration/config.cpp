@@ -57,7 +57,7 @@ const std::array<std::array<int, 5>, Settings::NativeAnalog::NumAnalogs> Config:
 // This must be in alphabetical order according to action name as it must have the same order as
 // UISetting::values.shortcuts, which is alphabetically ordered.
 // clang-format off
-const std::array<UISettings::Shortcut, 21> default_hotkeys{
+const std::array<UISettings::Shortcut, 23> default_hotkeys{
     {{QStringLiteral("Advance Frame"),            QStringLiteral("Main Window"), {QStringLiteral("\\"), Qt::ApplicationShortcut}},
      {QStringLiteral("Capture Screenshot"),       QStringLiteral("Main Window"), {QStringLiteral("Ctrl+P"), Qt::ApplicationShortcut}},
      {QStringLiteral("Continue/Pause Emulation"), QStringLiteral("Main Window"), {QStringLiteral("F4"), Qt::WindowShortcut}},
@@ -73,6 +73,8 @@ const std::array<UISettings::Shortcut, 21> default_hotkeys{
      {QStringLiteral("Rotate Screens Upright"),   QStringLiteral("Main Window"), {QStringLiteral("F8"), Qt::WindowShortcut}},
      {QStringLiteral("Stop Emulation"),           QStringLiteral("Main Window"), {QStringLiteral("F5"), Qt::WindowShortcut}},
      {QStringLiteral("Swap Screens"),             QStringLiteral("Main Window"), {QStringLiteral("F9"), Qt::WindowShortcut}},
+     {QStringLiteral("Save to Oldest Slot"),      QStringLiteral("Main Window"), {QStringLiteral("Ctrl+C"), Qt::WindowShortcut}},
+     {QStringLiteral("Load from Newest Slot"),    QStringLiteral("Main Window"), {QStringLiteral("Ctrl+V"), Qt::WindowShortcut}},
      {QStringLiteral("Toggle Filter Bar"),        QStringLiteral("Main Window"), {QStringLiteral("Ctrl+F"), Qt::WindowShortcut}},
      {QStringLiteral("Toggle Frame Advancing"),   QStringLiteral("Main Window"), {QStringLiteral("Ctrl+A"), Qt::ApplicationShortcut}},
      {QStringLiteral("Toggle Screen Layout"),     QStringLiteral("Main Window"), {QStringLiteral("F10"), Qt::WindowShortcut}},
@@ -570,6 +572,8 @@ void Config::ReadUIValues() {
     UISettings::values.show_console = ReadSetting(QStringLiteral("showConsole"), false).toBool();
     UISettings::values.pause_when_in_background =
         ReadSetting(QStringLiteral("pauseWhenInBackground"), false).toBool();
+    UISettings::values.hide_mouse =
+        ReadSetting(QStringLiteral("hideInactiveMouse"), false).toBool();
 
     qt_config->endGroup();
 }
@@ -1028,6 +1032,7 @@ void Config::SaveUIValues() {
     WriteSetting(QStringLiteral("showConsole"), UISettings::values.show_console, false);
     WriteSetting(QStringLiteral("pauseWhenInBackground"),
                  UISettings::values.pause_when_in_background, false);
+    WriteSetting(QStringLiteral("hideInactiveMouse"), UISettings::values.hide_mouse, false);
 
     qt_config->endGroup();
 }

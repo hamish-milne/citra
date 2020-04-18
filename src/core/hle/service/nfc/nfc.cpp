@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include "common/archives.h"
 #include "core/core.h"
 #include "core/hle/ipc_helpers.h"
 #include "core/hle/kernel/event.h"
@@ -10,7 +11,21 @@
 #include "core/hle/service/nfc/nfc_m.h"
 #include "core/hle/service/nfc/nfc_u.h"
 
+SERVICE_CONSTRUCT_IMPL(Service::NFC::Module)
+SERIALIZE_EXPORT_IMPL(Service::NFC::Module)
+
 namespace Service::NFC {
+
+template <class Archive>
+void Module::serialize(Archive& ar, const unsigned int) {
+    ar& tag_in_range_event;
+    ar& tag_out_of_range_event;
+    ar& nfc_tag_state;
+    ar& nfc_status;
+    ar& amiibo_data;
+    ar& amiibo_in_range;
+}
+SERIALIZE_IMPL(Module)
 
 struct TagInfo {
     u16_le id_offset_size;
@@ -323,10 +338,12 @@ void Module::SyncTagState() {
         // detected on Scanning->TagInRange?
         nfc_tag_state = TagState::TagInRange;
         tag_in_range_event->Signal();
-    } else if (!amiibo_in_range && nfc_tag_state == TagState::TagInRange) {
-        nfc_tag_state = TagState::TagOutOfRange;
+    } else if (!amiibo_in_range &&
+               (nfc_tag_state == TagState::TagInRange || nfc_tag_state == TagState::TagDataLoaded ||
+                nfc_tag_state == TagState::Unknown6)) {
         // TODO (wwylele): If a tag is removed during TagDataLoaded/Unknown6, should this event
         // signals early?
+        nfc_tag_state = TagState::TagOutOfRange;
         tag_out_of_range_event->Signal();
     }
 }

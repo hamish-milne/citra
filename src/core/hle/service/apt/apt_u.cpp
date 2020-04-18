@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include "common/archives.h"
 #include "core/hle/service/apt/apt_u.h"
 
 namespace Service::APT {
@@ -62,8 +63,8 @@ APT_U::APT_U(std::shared_ptr<Module> apt)
         {0x00330000, &APT_U::GetProgramIdOnApplicationJump, "GetProgramIdOnApplicationJump"},
         {0x00340084, nullptr, "SendDeliverArg"},
         {0x00350080, nullptr, "ReceiveDeliverArg"},
-        {0x00360040, nullptr, "LoadSysMenuArg"},
-        {0x00370042, nullptr, "StoreSysMenuArg"},
+        {0x00360040, &APT_U::LoadSysMenuArg, "LoadSysMenuArg"},
+        {0x00370042, &APT_U::StoreSysMenuArg, "StoreSysMenuArg"},
         {0x00380040, nullptr, "PreloadResidentApplet"},
         {0x00390040, nullptr, "PrepareToStartResidentApplet"},
         {0x003A0044, nullptr, "StartResidentApplet"},
@@ -102,3 +103,5 @@ APT_U::APT_U(std::shared_ptr<Module> apt)
 }
 
 } // namespace Service::APT
+
+SERIALIZE_EXPORT_IMPL(Service::APT::APT_U)

@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <clocale>
+#include <fstream>
 #include <memory>
 #include <thread>
 #include <QDesktopWidget>
@@ -78,6 +79,7 @@
 #include "core/hle/service/nfc/nfc.h"
 #include "core/loader/loader.h"
 #include "core/movie.h"
+#include "core/savestate.h"
 #include "core/settings.h"
 #include "game_list_p.h"
 #include "video_core/renderer_base.h"
@@ -101,6 +103,8 @@ extern "C" {
 __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
 }
 #endif
+
+constexpr int default_mouse_timeout = 2500;
 
 /**
  * "Callouts" are one-time instructional messages shown to the user. In the config settings, there
@@ -169,6 +173,7 @@ GMainWindow::GMainWindow() : config(new Config()), emu_thread(nullptr) {
     InitializeWidgets();
     InitializeDebugWidgets();
     InitializeRecentFileMenuActions();
+    InitializeSaveStateMenuActions();
     InitializeHotkeys();
     ShowUpdaterWidgets();
 
@@ -193,6 +198,14 @@ GMainWindow::GMainWindow() : config(new Config()), emu_thread(nullptr) {
 
     // Show one-time "callout" messages to the user
     ShowTelemetryCallout();
+
+    // make sure menubar has the arrow cursor instead of inheriting from this
+    ui.menubar->setCursor(QCursor());
+    statusBar()->setCursor(QCursor());
+
+    mouse_hide_timer.setInterval(default_mouse_timeout);
+    connect(&mouse_hide_timer, &QTimer::timeout, this, &GMainWindow::HideMouseCursor);
+    connect(ui.menubar, &QMenuBar::hovered, this, &GMainWindow::ShowMouseCursor);
 
     if (UISettings::values.check_for_update_on_start) {
         CheckForUpdates();
@@ -386,6 +399,32 @@ void GMainWindow::InitializeRecentFileMenuActions() {
     UpdateRecentFiles();
 }
 
+void GMainWindow::InitializeSaveStateMenuActions() {
+    for (u32 i = 0; i < Core::SaveStateSlotCount; ++i) {
+        actions_load_state[i] = new QAction(this);
+        actions_load_state[i]->setData(i + 1);
+        connect(actions_load_state[i], &QAction::triggered, this, &GMainWindow::OnLoadState);
+        ui.menu_Load_State->addAction(actions_load_state[i]);
+
+        actions_save_state[i] = new QAction(this);
+        actions_save_state[i]->setData(i + 1);
+        connect(actions_save_state[i], &QAction::triggered, this, &GMainWindow::OnSaveState);
+        ui.menu_Save_State->addAction(actions_save_state[i]);
+    }
+
+    connect(ui.action_Load_from_Newest_Slot, &QAction::triggered,
+            [this] { actions_load_state[newest_slot - 1]->trigger(); });
+    connect(ui.action_Save_to_Oldest_Slot, &QAction::triggered,
+            [this] { actions_save_state[oldest_slot - 1]->trigger(); });
+
+    connect(ui.menu_Load_State->menuAction(), &QAction::hovered, this,
+            &GMainWindow::UpdateSaveStates);
+    connect(ui.menu_Save_State->menuAction(), &QAction::hovered, this,
+            &GMainWindow::UpdateSaveStates);
+
+    UpdateSaveStates();
+}
+
 void GMainWindow::InitializeHotkeys() {
     hotkey_registry.LoadHotkeys();
 
@@ -499,6 +538,10 @@ void GMainWindow::InitializeHotkeys() {
                     OnCaptureScreenshot();
                 }
             });
+    connect(hotkey_registry.GetHotkey(main_window, ui.action_Load_from_Newest_Slot->text(), this),
+            &QShortcut::activated, ui.action_Load_from_Newest_Slot, &QAction::trigger);
+    connect(hotkey_registry.GetHotkey(main_window, ui.action_Save_to_Oldest_Slot->text(), this),
+            &QShortcut::activated, ui.action_Save_to_Oldest_Slot, &QAction::trigger);
 }
 
 void GMainWindow::ShowUpdaterWidgets() {
@@ -677,6 +720,7 @@ void GMainWindow::ConnectMenuEvents() {
         if (emulation_running) {
             ui.action_Enable_Frame_Advancing->setChecked(true);
             ui.action_Advance_Frame->setEnabled(true);
+            Core::System::GetInstance().frame_limiter.SetFrameAdvancing(true);
             Core::System::GetInstance().frame_limiter.AdvanceFrame();
         }
     });
@@ -965,6 +1009,13 @@ void GMainWindow::BootGame(const QString& filename) {
     }
     status_bar_update_timer.start(2000);
 
+    if (UISettings::values.hide_mouse) {
+        mouse_hide_timer.start();
+        setMouseTracking(true);
+        ui.centralwidget->setMouseTracking(true);
+        ui.menubar->setMouseTracking(true);
+    }
+
     // show and hide the render_window to create the context
     render_window->show();
     render_window->hide();
@@ -1063,12 +1114,18 @@ void GMainWindow::ShutdownGame() {
         game_list->show();
     game_list->setFilterFocus();
 
+    setMouseTracking(false);
+    ui.centralwidget->setMouseTracking(false);
+    ui.menubar->setMouseTracking(false);
+
     // Disable status bar updates
     status_bar_update_timer.stop();
     message_label->setVisible(false);
     emu_speed_label->setVisible(false);
     game_fps_label->setVisible(false);
     emu_frametime_label->setVisible(false);
+
+    UpdateSaveStates();
 
     emulation_running = false;
 
@@ -1114,6 +1171,62 @@ void GMainWindow::UpdateRecentFiles() {
 
     // Enable the recent files menu if the list isn't empty
     ui.menu_recent_files->setEnabled(num_recent_files != 0);
+}
+
+void GMainWindow::UpdateSaveStates() {
+    if (!Core::System::GetInstance().IsPoweredOn()) {
+        ui.menu_Load_State->setEnabled(false);
+        ui.menu_Save_State->setEnabled(false);
+        return;
+    }
+
+    ui.menu_Load_State->setEnabled(true);
+    ui.menu_Save_State->setEnabled(true);
+    ui.action_Load_from_Newest_Slot->setEnabled(false);
+
+    oldest_slot = newest_slot = 0;
+    oldest_slot_time = std::numeric_limits<u64>::max();
+    newest_slot_time = 0;
+
+    u64 title_id;
+    if (Core::System::GetInstance().GetAppLoader().ReadProgramId(title_id) !=
+        Loader::ResultStatus::Success) {
+        return;
+    }
+    auto savestates = Core::ListSaveStates(title_id);
+    for (u32 i = 0; i < Core::SaveStateSlotCount; ++i) {
+        actions_load_state[i]->setEnabled(false);
+        actions_load_state[i]->setText(tr("Slot %1").arg(i + 1));
+        actions_save_state[i]->setText(tr("Slot %1").arg(i + 1));
+    }
+    for (const auto& savestate : savestates) {
+        const auto text = tr("Slot %1 - %2")
+                              .arg(savestate.slot)
+                              .arg(QDateTime::fromSecsSinceEpoch(savestate.time)
+                                       .toString(QStringLiteral("yyyy-MM-dd hh:mm:ss")));
+        actions_load_state[savestate.slot - 1]->setEnabled(true);
+        actions_load_state[savestate.slot - 1]->setText(text);
+        actions_save_state[savestate.slot - 1]->setText(text);
+
+        ui.action_Load_from_Newest_Slot->setEnabled(true);
+
+        if (savestate.time > newest_slot_time) {
+            newest_slot = savestate.slot;
+            newest_slot_time = savestate.time;
+        }
+        if (savestate.time < oldest_slot_time) {
+            oldest_slot = savestate.slot;
+            oldest_slot_time = savestate.time;
+        }
+    }
+    for (u32 i = 0; i < Core::SaveStateSlotCount; ++i) {
+        if (!actions_load_state[i]->isEnabled()) {
+            // Prefer empty slot
+            oldest_slot = i + 1;
+            oldest_slot_time = 0;
+            break;
+        }
+    }
 }
 
 void GMainWindow::OnGameListLoadFile(QString game_path) {
@@ -1211,7 +1324,7 @@ void GMainWindow::OnGameListDumpRomFS(QString game_path, u64 program_id) {
     using FutureWatcher = QFutureWatcher<std::pair<Loader::ResultStatus, Loader::ResultStatus>>;
     auto* future_watcher = new FutureWatcher(this);
     connect(future_watcher, &FutureWatcher::finished,
-            [this, program_id, dialog, base_path, update_path, future_watcher] {
+            [this, dialog, base_path, update_path, future_watcher] {
                 dialog->hide();
                 const auto& [base, update] = future_watcher->result();
                 if (base != Loader::ResultStatus::Success) {
@@ -1364,7 +1477,7 @@ void GMainWindow::OnCIAInstallFinished() {
 
 void GMainWindow::OnMenuRecentFile() {
     QAction* action = qobject_cast<QAction*>(sender());
-    assert(action);
+    ASSERT(action);
 
     const QString filename = action->data().toString();
     if (QFileInfo::exists(filename)) {
@@ -1408,6 +1521,8 @@ void GMainWindow::OnStartGame() {
     ui.action_Capture_Screenshot->setEnabled(true);
 
     discord_rpc->Update();
+
+    UpdateSaveStates();
 }
 
 void GMainWindow::OnPauseGame() {
@@ -1555,6 +1670,23 @@ void GMainWindow::OnCheats() {
     cheat_dialog.exec();
 }
 
+void GMainWindow::OnSaveState() {
+    QAction* action = qobject_cast<QAction*>(sender());
+    assert(action);
+
+    Core::System::GetInstance().SendSignal(Core::System::Signal::Save, action->data().toUInt());
+    Core::System::GetInstance().frame_limiter.AdvanceFrame();
+    newest_slot = action->data().toUInt();
+}
+
+void GMainWindow::OnLoadState() {
+    QAction* action = qobject_cast<QAction*>(sender());
+    assert(action);
+
+    Core::System::GetInstance().SendSignal(Core::System::Signal::Load, action->data().toUInt());
+    Core::System::GetInstance().frame_limiter.AdvanceFrame();
+}
+
 void GMainWindow::OnConfigure() {
     ConfigureDialog configureDialog(this, hotkey_registry,
                                     !multiplayer_state->IsHostingPublicRoom());
@@ -1578,6 +1710,16 @@ void GMainWindow::OnConfigure() {
         SyncMenuUISettings();
         game_list->RefreshGameDirectory();
         config->Save();
+        if (UISettings::values.hide_mouse && emulation_running) {
+            setMouseTracking(true);
+            ui.centralwidget->setMouseTracking(true);
+            ui.menubar->setMouseTracking(true);
+            mouse_hide_timer.start();
+        } else {
+            setMouseTracking(false);
+            ui.centralwidget->setMouseTracking(false);
+            ui.menubar->setMouseTracking(false);
+        }
     } else {
         Settings::values.input_profiles = old_input_profiles;
         Settings::LoadProfile(old_input_profile_index);
@@ -1894,6 +2036,30 @@ void GMainWindow::UpdateStatusBar() {
     emu_frametime_label->setVisible(true);
 }
 
+void GMainWindow::HideMouseCursor() {
+    if (emu_thread == nullptr || UISettings::values.hide_mouse == false) {
+        mouse_hide_timer.stop();
+        ShowMouseCursor();
+        return;
+    }
+    setCursor(QCursor(Qt::BlankCursor));
+}
+
+void GMainWindow::ShowMouseCursor() {
+    unsetCursor();
+    if (emu_thread != nullptr && UISettings::values.hide_mouse) {
+        mouse_hide_timer.start();
+    }
+}
+
+void GMainWindow::mouseMoveEvent(QMouseEvent* event) {
+    ShowMouseCursor();
+}
+
+void GMainWindow::mousePressEvent(QMouseEvent* event) {
+    ShowMouseCursor();
+}
+
 void GMainWindow::OnCoreError(Core::System::ResultStatus result, std::string details) {
     QString status_message;
 
@@ -1913,6 +2079,9 @@ void GMainWindow::OnCoreError(Core::System::ResultStatus result, std::string det
 
         title = tr("System Archive Not Found");
         status_message = tr("System Archive Missing");
+    } else if (result == Core::System::ResultStatus::ErrorSavestate) {
+        title = tr("Save/load Error");
+        message = QString::fromStdString(details);
     } else {
         title = tr("Fatal Error");
         message =
