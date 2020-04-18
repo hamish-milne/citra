@@ -65,7 +65,8 @@ jobs:
           - name: Windows-MSVC
             os: "windows-2019"
             generator: Ninja
-            defs: -DMSVC=1
+            deps: |
+              &{Import-Module "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"; Enter-VsDevShell eb767fea}
             run_tests: true
 
           - name: Windows-MinGW
@@ -87,12 +88,6 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: recursive
-      - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v1.0.0
-        if: matrix.config.os == 'windows-2019'
-      - name: Install Ninja
-        uses: seanmiddleditch/gha-setup-ninja@master
-        if: matrix.config.os == 'windows-2019'
       - run: |
           mkdir build
           ${{matrix.config.deps}}
