@@ -65,7 +65,7 @@ jobs:
           - name: Windows-MSVC
             os: "windows-2019"
             generator: Ninja
-            deps: |
+            enter_shell: |
               $VsInstallPath="C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise"
               Import-Module "$VsInstallPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
               Enter-VsDevShell -VsInstallPath $VsInstallPath
@@ -94,7 +94,9 @@ jobs:
           mkdir build
           ${{matrix.config.deps}}
         name: Dependencies
-      - run: ${{matrix.config.cmake_shell}} cmake .. -G '${{matrix.config.generator}}'
+      - run: ${{matrix.config.enter_shell}}
+
+          ${{matrix.config.cmake_shell}} cmake .. -G '${{matrix.config.generator}}'
           -DCMAKE_BUILD_TYPE=${{env.config}}
           -DBUILD_REPOSITORY=${{github.repository}}
           -DBUILD_TAG=${{github.ref}}
@@ -105,7 +107,9 @@ jobs:
           ${{matrix.config.defs}} ${{matrix.config.shell_end}}
         name: Configure
         working-directory: build
-      - run: ${{matrix.config.cmake_shell}} cmake --build . --config ${{env.config}} ${{matrix.config.shell_end}}
+      - run: |
+          ${{matrix.config.enter_shell}}
+          ${{matrix.config.cmake_shell}} cmake --build . --config ${{env.config}} ${{matrix.config.shell_end}}
         name: Build
         working-directory: build
       - run: ctest -C ${{env.config}}
