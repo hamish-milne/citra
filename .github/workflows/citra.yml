@@ -65,6 +65,7 @@ jobs:
           - name: Windows-MSVC
             os: "windows-2019"
             generator: Ninja
+            defs: -DMSVC=1
             run_tests: true
 
           - name: Windows-MinGW
