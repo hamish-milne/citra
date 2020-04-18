@@ -26,7 +26,7 @@ if(UNIX AND NOT APPLE)
     install(TARGETS citra RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
 endif()
 
-if (WIN32 AND NOT UNIX)
+if (MSVC OR MSYS)
     include(CopyCitraSDLDeps)
     copy_citra_SDL_deps(citra)
 endif()
