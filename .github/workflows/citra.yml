@@ -105,7 +105,7 @@ jobs:
         working-directory: build
       - run: |
           ${{matrix.config.enter_shell}}
-          ${{matrix.config.cmake_shell}} cmake --build . --config ${{env.config}} ${{matrix.config.shell_end}} -- ${{matrix.config.build_flags}}
+          ${{matrix.config.cmake_shell}} cmake --build . --config ${{env.config}} -- ${{matrix.config.build_flags}} ${{matrix.config.shell_end}}
         name: Build
         working-directory: build
       - run: ctest -C ${{env.config}}
