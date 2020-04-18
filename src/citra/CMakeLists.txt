@@ -26,11 +26,11 @@ if(UNIX AND NOT APPLE)
     install(TARGETS citra RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
 endif()
 
+if (WIN32 AND MINGW AND COMPILE_WITH_DWARF)
+    add_custom_command(TARGET citra POST_BUILD COMMAND "${PROJECT_SOURCE_DIR}/externals/ext-windows-bin/cv2pdb/cv2pdb.exe" "$<TARGET_FILE:citra>")
+endif()
+
 if (MSVC OR MSYS)
     include(CopyCitraSDLDeps)
     copy_citra_SDL_deps(citra)
-endif()
-
-if (WIN32 AND MINGW AND COMPILE_WITH_DWARF)
-    add_custom_command(TARGET citra POST_BUILD COMMAND "${PROJECT_SOURCE_DIR}/externals/ext-windows-bin/cv2pdb/cv2pdb.exe" $<TARGET_FILE:citra>)
 endif()

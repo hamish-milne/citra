@@ -24,5 +24,5 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if (WIN32 AND MINGW AND COMPILE_WITH_DWARF)
-    add_custom_command(TARGET citra-room POST_BUILD COMMAND "${PROJECT_SOURCE_DIR}/externals/ext-windows-bin/cv2pdb/cv2pdb.exe" $<TARGET_FILE:citra-room>)
+    add_custom_command(TARGET citra-room POST_BUILD COMMAND "${PROJECT_SOURCE_DIR}/externals/ext-windows-bin/cv2pdb/cv2pdb.exe" "$<TARGET_FILE:citra-room>")
 endif()
