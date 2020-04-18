@@ -30,3 +30,7 @@ if (MSVC)
     include(CopyCitraSDLDeps)
     copy_citra_SDL_deps(citra)
 endif()
+
+if (WIN32 AND MINGW AND COMPILE_WITH_DWARF)
+    add_custom_command(TARGET citra POST_BUILD COMMAND "${PROJECT_SOURCE_DIR}/externals/ext-windows-bin/cv2pdb/cv2pdb.exe" $<TARGET_FILE:citra>)
+endif()

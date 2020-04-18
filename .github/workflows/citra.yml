@@ -102,7 +102,7 @@ jobs:
       - run: ctest -C ${{env.config}}
         name: Test
         working-directory: build
-        if: matrix.run_tests
+        if: matrix.config.run_tests
       - uses: actions/upload-artifact@v1
         name: Publish
         with:

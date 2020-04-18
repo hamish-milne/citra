@@ -22,3 +22,7 @@ target_link_libraries(citra-room PRIVATE ${PLATFORM_LIBRARIES} Threads::Threads)
 if(UNIX AND NOT APPLE)
     install(TARGETS citra-room RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}/bin")
 endif()
+
+if (WIN32 AND MINGW AND COMPILE_WITH_DWARF)
+    add_custom_command(TARGET citra-room POST_BUILD COMMAND "${PROJECT_SOURCE_DIR}/externals/ext-windows-bin/cv2pdb/cv2pdb.exe" $<TARGET_FILE:citra-room>)
+endif()

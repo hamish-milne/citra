@@ -49,3 +49,6 @@
 [submodule "zstd"]
     path = externals/zstd
     url = https://github.com/facebook/zstd.git
+[submodule "externals/ext-windows-bin"]
+	path = externals/ext-windows-bin
+	url = https://github.com/citra-emu/ext-windows-bin
