@@ -120,5 +120,5 @@ jobs:
       - uses: actions/upload-artifact@v1
         name: Publish
         with:
-          name: citra-${{matrix.config.name}}-${{github.ref}}-${{github.sha}}
+          name: citra-${{matrix.config.name}}-${{github.sha}}
           path: build/bin/${{matrix.config.bindir}}
