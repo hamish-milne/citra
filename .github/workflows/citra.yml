@@ -78,7 +78,7 @@ jobs:
             build_flags: -j2
             cmake_shell: '&"../msys2/usr/bin/bash" -lc "'
             shell_end: '"'
-            run_tests: true
+            run_tests: false
   
     runs-on: ${{matrix.config.os}}
     name: ${{matrix.config.name}}
