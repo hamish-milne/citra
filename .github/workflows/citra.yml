@@ -78,6 +78,7 @@ jobs:
             build_flags: -j2
             cmake_shell: '&"../msys2/usr/bin/bash" -lc "'
             shell_end: '"'
+            defs: -DMSYS_DIR="${{github.workspace}}/msys2/mingw64"
             run_tests: true
   
     runs-on: ${{matrix.config.os}}
