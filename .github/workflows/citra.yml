@@ -84,12 +84,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+        name: Checkout
         with:
           submodules: recursive
       - run: |
           mkdir build
           ${{matrix.config.deps}}
         name: Dependencies
+      - name: Enter VS shell
+        uses: microsoft/setup-msbuild@v1.0.0
+        if: matrix.config.os == 'windows-2019'
       - run: ${{matrix.config.enter_shell}}
 
           ${{matrix.config.cmake_shell}} cmake .. -G '${{matrix.config.generator}}'
