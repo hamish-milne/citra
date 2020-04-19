@@ -128,6 +128,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set up output paths for executable binaries
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
+if (MSVC)
+    set(DLL_DEST "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/")
+else()
+    set(DLL_DEST "${CMAKE_BINARY_DIR}/bin/")
+endif()
+
 
 # System imported libraries
 # ======================
