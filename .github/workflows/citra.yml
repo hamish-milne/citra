@@ -65,10 +65,6 @@ jobs:
           - name: Windows-MSVC
             os: "windows-2019"
             generator: "Visual Studio 16 2019"
-            enter_shell: |
-              $VsInstallPath="C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise"
-              Import-Module "$VsInstallPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
-              Enter-VsDevShell -VsInstallPath $VsInstallPath
             run_tests: true
 
           - name: Windows-MinGW
@@ -78,6 +74,11 @@ jobs:
               git clone https://github.com/msys2/msys2-ci-base.git "./msys2"
               &"./msys2/usr/bin/pacman" --noconfirm -Syyuu
               &"./msys2/usr/bin/pacman" --noconfirm -S "mingw-w64-x86_64-{gcc,SDL2,qt5,cmake,ffmpeg}" make
+            # Use the VS dev shell so that cv2pdb's dependencies are on the path
+            enter_shell: |
+              $VsInstallPath="C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise"
+              Import-Module "$VsInstallPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+              Enter-VsDevShell -VsInstallPath $VsInstallPath
             build_flags: -j2
             cmake_shell: '&"../msys2/usr/bin/bash" -lc "'
             shell_end: '"'
@@ -95,9 +96,6 @@ jobs:
           mkdir build
           ${{matrix.config.deps}}
         name: Dependencies
-      - name: Enter VS shell
-        uses: microsoft/setup-msbuild@v1.0.0
-        if: matrix.config.os == 'windows-2019'
       - run: ${{matrix.config.enter_shell}}
 
           ${{matrix.config.cmake_shell}} cmake .. -G '${{matrix.config.generator}}'
