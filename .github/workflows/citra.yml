@@ -7,6 +7,7 @@ jobs:
       MSYSTEM: MINGW64
       # Tell msys2 to inherit the current directory when starting the shell
       CHERE_INVOKING: 1
+      SHA8: ${GITHUB_SHA::8}
     strategy:
       matrix:
         config:
@@ -78,7 +79,6 @@ jobs:
             build_flags: -j2
             cmake_shell: '&"../msys2/usr/bin/bash" -lc "'
             shell_end: '"'
-            defs: -DMSYS_DIR="${{github.workspace}}/msys2/mingw64"
             run_tests: false
   
     runs-on: ${{matrix.config.os}}
@@ -121,5 +121,5 @@ jobs:
       - uses: actions/upload-artifact@v1
         name: Publish
         with:
-          name: citra-${{matrix.config.name}}-${{github.sha}}
+          name: citra-${{matrix.config.name}}-${{github.ref}}-${{env.SHA8}}
           path: build/bin/${{matrix.config.bindir}}
