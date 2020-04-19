@@ -66,6 +66,7 @@ jobs:
             os: "windows-2019"
             generator: "Visual Studio 16 2019"
             run_tests: true
+            bindir: ${{env.config}}
 
           - name: Windows-MinGW
             os: "windows-2019"
@@ -74,11 +75,6 @@ jobs:
               git clone https://github.com/msys2/msys2-ci-base.git "./msys2"
               &"./msys2/usr/bin/pacman" --noconfirm -Syyuu
               &"./msys2/usr/bin/pacman" --noconfirm -S "mingw-w64-x86_64-{gcc,SDL2,qt5,cmake,ffmpeg}" make
-            # Use the VS dev shell so that cv2pdb's dependencies are on the path
-            enter_shell: |
-              $VsInstallPath="C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise"
-              Import-Module "$VsInstallPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
-              Enter-VsDevShell -VsInstallPath $VsInstallPath
             build_flags: -j2
             cmake_shell: '&"../msys2/usr/bin/bash" -lc "'
             shell_end: '"'
@@ -118,8 +114,11 @@ jobs:
         name: Test
         working-directory: build
         if: matrix.config.run_tests
+      - run: rm -r test*
+        name: Clean up
+        working-directory: build/bin${{matrix.config.bindir}}
       - uses: actions/upload-artifact@v1
         name: Publish
         with:
-          name: ${{matrix.config.name}}
-          path: build/bin
+          name: citra-${{matrix.config.name}}-${{github.sha}}
+          path: build/bin${{matrix.config.bindir}}
