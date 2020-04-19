@@ -17,7 +17,7 @@ function(windows_copy_files TARGET SOURCE_DIR DEST_DIR)
 
     if (MSYS)
         add_custom_command(TARGET ${TARGET} POST_BUILD
-            COMMAND cd "${SOURCE_DIR}" && cp -r ${ARGN} -t "${DEST_DIR}"
+            COMMAND cd "${SOURCE_DIR}" && cp -r ${ARGN} -t "${DEST_DIR}" || :
         )
     else()
         # windows commandline expects the / to be \ so switch them
