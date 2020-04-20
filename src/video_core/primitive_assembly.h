@@ -7,6 +7,7 @@
 #include <array>
 #include <functional>
 #include <boost/serialization/access.hpp>
+#include <boost/serialization/array.hpp>
 #include "video_core/regs_pipeline.h"
 
 namespace Pica {
@@ -68,7 +69,7 @@ private:
     template <class Archive>
     void serialize(Archive& ar, const unsigned int version) {
         ar& topology;
-        ar& buffer_index;
+        ar& boost::serialization::make_array(buffer.data(), buffer.size());
         ar& buffer;
         ar& strip_ready;
         ar& winding;
