@@ -2,6 +2,7 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
 #include <atomic>
 #include <list>
 #include <mutex>
@@ -68,8 +69,7 @@ Keyboard::Keyboard() : key_button_list{std::make_shared<KeyButtonList>()} {}
 std::unique_ptr<Input::ButtonDevice> Keyboard::Create(const Common::ParamPackage& params) {
     int key_code = params.Get("code", 0);
     auto& pair = key_button_list->AddKeyButton(key_code);
-    std::unique_ptr<KeyButton> button = std::make_unique<KeyButton>(pair.status);
-    return std::move(button);
+    return std::make_unique<KeyButton>(pair.status);
 }
 
 void Keyboard::PressKey(int key_code) {
