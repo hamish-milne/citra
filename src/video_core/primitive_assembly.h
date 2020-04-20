@@ -69,8 +69,8 @@ private:
     template <class Archive>
     void serialize(Archive& ar, const unsigned int version) {
         ar& topology;
+        ar& buffer_index;
         ar& boost::serialization::make_array(buffer.data(), buffer.size());
-        ar& buffer;
         ar& strip_ready;
         ar& winding;
     }
