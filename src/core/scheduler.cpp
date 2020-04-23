@@ -1,45 +1,87 @@
 #include <algorithm>
+#include <limits>
 #include "core/core_timing.h"
 #include "scheduler.h"
 
 namespace Core {
 
 void Scheduler::RunSlice() {
-    // Only run til the next event
-    auto next_event = event_heap.begin();
-    if (next_event != event_heap.end() && next_event->cycles < (Ticks() + current_slice_length)) {
-        auto delta = (Ticks() + current_slice_length) - next_event->cycles;
-        current_slice_length -= delta;
+    // We assume:
+    //  * Threads don't, e.g. write memory at the same time
+    //  * Events end with b) a thread waking up, or b) some other change
+    //  * Events don't schedule other events to execute immediately
+
+    // Run events scheduled for 'now'. Threshold chosen to reduce small slices.
+    while (TimeToNextEvent() < 100) {
+        auto next_event = event_heap.front();
+        next_event.event_type->callback(0, Ticks() - next_event.cycles);
     }
+    // the max slice time is fairly arbitrary, as it represents the largest duration by which cores
+    // can be out of sync. The real maximum value without sacrificing accuracy will depend on
+    // software.
+    current_slice_length = BASE_CLOCK_RATE_ARM11 / 234;
+    // Only run the slice til the next event:
+    if (TimeToNextEvent() < current_slice_length) {
+        current_slice_length = TimeToNextEvent();
+    }
+    // No cores have run yet, so it's OK to schedule any events we want during this segment
+    max_core_time = 0;
     for (auto& core : cores) {
-        core.RunSegment(current_slice_length);
+        s64 cycles_run = core.RunSegment(current_slice_length);
+        // Uniquely for the first core, we cut the slice if an event was scheduled before the
+        // segment's end. This allows other cores to respond to events scheduled on it. For
+        // subsequent cores, however, this isn't practical because core 0 (at least) will be ahead
+        // in time already.
+        // TODO: Implement core re-ordering
+        if (core.CanCutSlice()) {
+            current_slice_length = std::min(current_slice_length, cycles_run);
+            max_core_time = cycles_run + Ticks();
         }
+    }
 }
 
-void SchedulerCore::RunSegment() {
-    this->cycles_remaining = root.current_slice_length + delay_cycles;
-    delay_cycles = 0;
-    do {
-
-        if (Reschedule()) {
-            CPU().Run(cycles_remaining);
-        }
-        if (next_event != root.event_heap.end() && cycles_remaining <= 0) {
-            next_event->event_type->callback(0, -cycles_remaining);
-        }
-        cycles_remaining += deferred_cycles;
-    } while (cycles_remaining > 0);
-    if (&root.cores[0] == this && root.current_slice_length > delay_cycles) {
-        // An optimization: if the first core was interrupted, make that the slice length for the
-        // others
-        root.current_slice_length -= delay_cycles;
-        delay_cycles = 0;
+s64 Scheduler::TimeToNextEvent() const {
+    if (event_heap.empty()) {
+        return std::numeric_limits<s64>::max;
     }
+    return event_heap.front().cycles - Ticks();
+}
+
+u64 SchedulerCore::RunSegment(u64 instruction_count) {
+    cycles_remaining = instruction_count;
+    s64 defer_cycles = 0;
+    do {
+        if (Reschedule()) {
+            // TODO: Change CPU interface
+            CPU().Run(cycles_remaining);
+        } else {
+            // If idle, just advance time by the requested cycle count
+            cycles_remaining = 0;
+        }
+        // Un-defer any cycles from the last sub-segment
+        cycles_remaining += defer_cycles;
+        defer_cycles = 0;
+
+        // A block can end early for the following reasons:
+        //  * An event was scheduled while idle, and executing it didn't cause our core to continue
+        //  * An event was scheduled while running
+        //  * All threads have yielded and none are ready to run
+        auto time_to_event = root.TimeToNextEvent();
+        if (CanCutSlice()) {
+            // If we can cut the slice, we should do so at this point.
+            cycles_remaining = std::min(time_to_event, cycles_remaining);
+        } else if (time_to_event < cycles_remaining) {
+            // Event was scheduled by this core, very soon, and we can't cut the slice.
+            // So we need to schedule a smaller segment
+            defer_cycles = cycles_remaining - time_to_event;
+            cycles_remaining = time_to_event;
+        }
+
+    } while (cycles_remaining > 0);
 }
 
 void Scheduler::ScheduleEvent(Core::TimingEventType* event, s64 cycles_into_future) {
     ASSERT(cycles_into_future > 0);
-    auto& core = cores[current_core_id];
 
     if ((Ticks() + cycles_into_future) < max_core_time) {
         LOG_WARNING(Core, "Event {} was scheduled {} cycles too soon for all cores to respond",
@@ -47,15 +89,13 @@ void Scheduler::ScheduleEvent(Core::TimingEventType* event, s64 cycles_into_futu
     }
 
     // Try to continue the current execution:
+    auto& core = cores[current_core_id];
     if (cycles_into_future < core.cycles_remaining) {
+        // If we're idle, try executing the event now to see if it'll wake us up
         if (core.AllThreadsIdle()) {
             core.AddTicks(cycles_into_future);
             event->callback(0, 0);
-            // If no threads on our core were woken up, it was probably
-            // a different core, so end the block now.
-            if (!core.Reschedule()) {
-                core.EndBlock();
-            }
+            core.Reschedule();
             return;
         }
         // If a thread is running, end the block ASAP so we can run a more
@@ -71,25 +111,30 @@ void Scheduler::ScheduleEvent(Core::TimingEventType* event, s64 cycles_into_futu
 
 bool SchedulerCore::Reschedule() {
     while (true) {
+        // The 3ds uses cooperative multithreading. Never interrupt a thread that's already running.
         if (thread->status == Kernel::ThreadStatus::Running) {
             return true;
         }
 
+        // Order the threads by status and priority
         std::make_heap(thread_heap.begin(), thread_heap.end(), std::greater<>());
 
+        // If there are no threads, end the block
         auto next_thread = thread_heap.begin();
         if (next_thread == thread_heap.end()) {
             break;
         }
 
+        // If there was no change, we're good!
         if (*next_thread == thread) {
-            break;
+            return true;
         }
 
+        // If the next candidate thread isn't ready, try executing events to wake it up
         if ((*next_thread)->status != Kernel::ThreadStatus::Ready) {
             auto next_event = root.event_heap.begin();
             if (next_event == root.event_heap.end()) {
-                return;
+                break;
             }
             if (next_event->cycles > (Ticks() + cycles_remaining)) {
                 break;
@@ -101,12 +146,14 @@ bool SchedulerCore::Reschedule() {
             continue;
         }
 
+        // Now that we've found us a thread to run, we can change the CPU context inline
         CPU().SaveContext(thread->context);
         thread = *next_thread;
         CPU().LoadContext(thread->context);
-        return;
+        return true;
     }
 
+    // Otherwise, end the block now as there's nothing for the CPU to do.
     EndBlock();
     return false;
 }

@@ -18,7 +18,7 @@ public:
     Scheduler& GetCore(int core_id) const;
     void ScheduleEvent(Core::TimingEventType* event, s64 cycles_into_future);
     void RunSlice();
-    u64 Ticks();
+    u64 Ticks() const;
 
 private:
     struct Event {
@@ -32,6 +32,8 @@ private:
             return cycles < right.cycles;
         }
     };
+
+    s64 TimeToNextEvent() const;
 
     u8 current_core_id;
     std::vector<SchedulerCore> cores;
@@ -47,13 +49,15 @@ class SchedulerCore {
 public:
     explicit SchedulerCore(int core_id);
     void SetThreadPriority(int priority);
+
+    void WaitOne(Kernel::WaitObject* object);
+    void WaitAny(std::vector<Kernel::WaitObject*> objects);
+    void WaitAll(std::vector<Kernel::WaitObject*> objects);
+    void Sleep(s64 nanoseconds);
     void Stop();
 
-    void SetWaitObjects(std::vector<Kernel::WaitObject> objects);
-    void Yield(Kernel::ThreadStatus status);
-    void YieldWithEvent(Kernel::ThreadStatus status, Core::TimingEventType* event,
-                        s64 cycles_into_future);
     bool Reschedule();
+    u64 RunSegment(u64 instruction_count);
 
     Kernel::Process& Process() const;
     Kernel::Thread& Thread() const;
@@ -69,15 +73,33 @@ private:
     Scheduler& root;
     std::shared_ptr<Kernel::Process> process;
     Kernel::Thread* thread;
-    std::vector<Kernel::Thread*> thread_heap;
+    std::vector<Thread2*> thread_heap;
     s64 cycles_remaining;
     s64 delay_cycles;
 
-    void RunSegment(u64 instruction_count);
-    bool AllThreadsIdle();
+    bool CanCutSlice() const {
+        return core_id == 0;
+    }
     void EndBlock();
 
     friend class Scheduler;
+};
+
+class Thread2 : public Kernel::WaitObject {
+
+public:
+    explicit Thread2(SchedulerCore& core);
+    virtual ~Thread2();
+
+    bool operator>(Thread2& right) const;
+
+private:
+    SchedulerCore& core;
+    Kernel::ThreadStatus status;
+    std::unique_ptr<ARM_Interface::ThreadContext> context;
+    std::vector<Kernel::WaitObject*> waiting_on;
+
+    friend class SchedulerCore;
 };
 
 } // namespace Core
