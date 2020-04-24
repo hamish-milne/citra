@@ -10,13 +10,22 @@ namespace Core {
 
 struct Ticks {};
 
-struct Cycles {};
+struct Cycles {
+    Cycles(s64 _count) : count(_count) {}
+    operator s64() {
+        return count;
+    }
+    Cycles(std::chrono::nanoseconds ns) : count(ns.count() * BASE_CLOCK_RATE_ARM11 / 1000000000) {}
+
+private:
+    s64 count;
+};
 
 class Scheduler {
 
 public:
     Scheduler& GetCore(int core_id) const;
-    void ScheduleEvent(Core::TimingEventType* event, s64 cycles_into_future);
+    void ScheduleEvent(Core::TimingEventType* event, Cycles cycles_into_future);
     void RunSlice();
     u64 Ticks() const;
 
@@ -53,11 +62,11 @@ public:
     void WaitOne(Kernel::WaitObject* object);
     void WaitAny(std::vector<Kernel::WaitObject*> objects);
     void WaitAll(std::vector<Kernel::WaitObject*> objects);
-    void Sleep(s64 nanoseconds);
+    void Sleep(std::chrono::nanoseconds nanoseconds);
     void Stop();
 
     bool Reschedule();
-    u64 RunSegment(u64 instruction_count);
+    Cycles RunSegment(Cycles instruction_count);
 
     Kernel::Process& Process() const;
     Kernel::Thread& Thread() const;
@@ -88,14 +97,18 @@ private:
 class Thread2 : public Kernel::WaitObject {
 
 public:
+    enum Status { Created, Ready, Running, Yielding, Waiting, Destroyed };
+
     explicit Thread2(SchedulerCore& core);
     virtual ~Thread2();
 
     bool operator>(Thread2& right) const;
 
+    void WaitObjectReady(Kernel::WaitObject* object);
+
 private:
     SchedulerCore& core;
-    Kernel::ThreadStatus status;
+    Status status;
     std::unique_ptr<ARM_Interface::ThreadContext> context;
     std::vector<Kernel::WaitObject*> waiting_on;
 

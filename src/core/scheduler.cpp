@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <chrono>
 #include <limits>
+#include "common/assert.h"
 #include "core/core_timing.h"
 #include "scheduler.h"
 
@@ -47,9 +49,9 @@ s64 Scheduler::TimeToNextEvent() const {
     return event_heap.front().cycles - Ticks();
 }
 
-u64 SchedulerCore::RunSegment(u64 instruction_count) {
+Cycles SchedulerCore::RunSegment(Cycles instruction_count) {
     cycles_remaining = instruction_count;
-    s64 defer_cycles = 0;
+    Cycles defer_cycles = 0;
     do {
         if (Reschedule()) {
             // TODO: Change CPU interface
@@ -80,7 +82,7 @@ u64 SchedulerCore::RunSegment(u64 instruction_count) {
     } while (cycles_remaining > 0);
 }
 
-void Scheduler::ScheduleEvent(Core::TimingEventType* event, s64 cycles_into_future) {
+void Scheduler::ScheduleEvent(Core::TimingEventType* event, Cycles cycles_into_future) {
     ASSERT(cycles_into_future > 0);
 
     if ((Ticks() + cycles_into_future) < max_core_time) {
@@ -160,6 +162,78 @@ bool SchedulerCore::Reschedule() {
 
 void SchedulerCore::EndBlock() {
     CPU().PrepareReschedule();
+}
+
+void SchedulerCore::WaitOne(Kernel::WaitObject* object) {
+    auto thread = Kernel::SharedFrom(thread_heap.front());
+    ASSERT(thread.status == Thread2::Status::Running);
+    if (!object->ShouldWait(thread.get())) {
+        object->Acquire(thread.get());
+        // TODO: Sync result
+        return;
+    }
+
+    thread.waiting_on = {object};
+    object->AddWaitingThread(thread);
+    thread->status = Thread2::Status::Waiting;
+    Reschedule();
+    return;
+}
+
+void SchedulerCore::WaitAny(std::vector<Kernel::WaitObject*> objects) {
+    auto thread = Kernel::SharedFrom(thread_heap.front());
+    ASSERT(thread.status == Thread2::Status::Running);
+    auto active_obj =
+        std::find_if(objects.begin(), objects.end(), [&thread](const Kernel::WaitObject* obj) {
+            return !obj->ShouldWait(thread.get());
+        });
+    if (active_obj != objects.end()) {
+        (*active_obj)->Acquire(thread.get());
+        // TODO: Sync result
+        return;
+    }
+
+    thread.waiting_on = objects;
+    for (auto obj : objects) {
+        obj->AddWaitingThread(thread.get());
+    }
+    thread->status = Thread2::Status::Waiting;
+    Reschedule();
+    return;
+}
+
+void SchedulerCore::WaitAll(std::vector<Kernel::WaitObject*> objects) {}
+
+void SchedulerCore::Sleep() {
+    auto thread = Kernel::SharedFrom(thread_heap.front());
+    ASSERT(thread.status == Thread2::Status::Running);
+    thread->status == Thread2::Status::Waiting;
+    Reschedule();
+}
+
+void SchedulerCore::Sleep(std::chrono::nanoseconds duration) {
+    auto thread = Kernel::SharedFrom(thread_heap.front());
+    ASSERT(thread.status == Thread2::Status::Running);
+    if (duration.count() > 0) {
+        root.ScheduleEvent(WakeupEvent, duration);
+        thread->status == Thread2::Status::Waiting;
+    } else {
+        thread->status == Thread2::Status::Yielding;
+    }
+    Reschedule();
+}
+
+void Thread2::WaitObjectReady(Kernel::WaitObject* object) {
+    if (std::remove(waiting_on.begin(), waiting_on.end(), object) != waiting_on.end()) {
+        if (wait_all) {
+            if (waiting_on.empty()) {
+                status == Thread2::Status::Ready;
+            }
+        } else {
+            waiting_on.clear();
+            status == Thread2::Status::Ready;
+        }
+    }
 }
 
 } // namespace Core
