@@ -21,6 +21,9 @@ private:
     s64 count;
 };
 
+class SchedulerCore;
+class Thread;
+
 class Scheduler {
 
 public:
@@ -53,15 +56,43 @@ private:
     friend class SchedulerCore;
 };
 
+class Thread : public Kernel::WaitObject {
+
+public:
+    enum Status { Created, Ready, Running, Yielding, Waiting, Destroyed };
+
+    explicit Thread(SchedulerCore& core);
+    virtual ~Thread();
+
+    bool operator>(Thread& right) const {
+        return (status * 10000 - priority) > (right.status * 10000 - right.priority);
+    }
+
+    void WaitObjectReady(Kernel::WaitObject* object);
+    void SetPriority(u32 value) {
+        priority = value;
+    }
+
+private:
+    u32 sequential_id;
+    SchedulerCore& core;
+    Status status;
+    std::unique_ptr<ARM_Interface::ThreadContext> context;
+    std::vector<Kernel::WaitObject*> waiting_on;
+    u32 priority;
+
+    friend class SchedulerCore;
+};
+
 class SchedulerCore {
 
 public:
     explicit SchedulerCore(int core_id);
-    void SetThreadPriority(int priority);
 
     void WaitOne(Kernel::WaitObject* object);
     void WaitAny(std::vector<Kernel::WaitObject*> objects);
     void WaitAll(std::vector<Kernel::WaitObject*> objects);
+    void Sleep();
     void Sleep(std::chrono::nanoseconds nanoseconds);
     void Stop();
 
@@ -80,9 +111,9 @@ public:
 private:
     int core_id;
     Scheduler& root;
-    std::shared_ptr<Kernel::Process> process;
-    Kernel::Thread* thread;
-    std::vector<Thread2*> thread_heap;
+    Core::Thread* thread;
+    std::vector<Core::Thread*> thread_heap;
+    std::vector<Core::Thread*> thread_list;
     s64 cycles_remaining;
     s64 delay_cycles;
 
@@ -91,28 +122,22 @@ private:
     }
     void EndBlock();
 
+    u32 GetSequentialIndex(Core::Thread* thread) {
+        auto it = std::find(thread_list.begin(), thread_list.end(), nullptr);
+        if (it == thread_list.end()) {
+            thread_list.push_back(thread);
+        } else {
+            *it = thread;
+        }
+        return thread_list.begin() - it;
+    }
+
+    void RemoveThread(Core::Thread* thread) {
+        thread_list[thread->sequential_id] = nullptr;
+    }
+
     friend class Scheduler;
-};
-
-class Thread2 : public Kernel::WaitObject {
-
-public:
-    enum Status { Created, Ready, Running, Yielding, Waiting, Destroyed };
-
-    explicit Thread2(SchedulerCore& core);
-    virtual ~Thread2();
-
-    bool operator>(Thread2& right) const;
-
-    void WaitObjectReady(Kernel::WaitObject* object);
-
-private:
-    SchedulerCore& core;
-    Status status;
-    std::unique_ptr<ARM_Interface::ThreadContext> context;
-    std::vector<Kernel::WaitObject*> waiting_on;
-
-    friend class SchedulerCore;
+    friend class Thread;
 };
 
 } // namespace Core
