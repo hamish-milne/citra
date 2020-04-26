@@ -3,69 +3,125 @@
 #include <vector>
 #include "core/arm/arm_interface.h"
 #include "core/hle/kernel/process.h"
-#include "core/hle/kernel/thread.h"
 #include "core/hle/kernel/wait_object.h"
 
-namespace Core {
-
-struct Ticks {};
-
 struct Cycles {
-    Cycles(s64 _count) : count(_count) {}
-    operator s64() {
+    constexpr explicit Cycles(s64 _count) : count(_count) {}
+    constexpr explicit operator s64() {
         return count;
     }
-    Cycles(std::chrono::nanoseconds ns) : count(ns.count() * BASE_CLOCK_RATE_ARM11 / 1000000000) {}
+    constexpr Cycles(Ticks ticks, float scale_factor)
+        : count(static_cast<s64>(s64(ticks) * scale_factor)) {}
+
+    constexpr bool operator<(const Cycles& right) const {
+        return count < right.count;
+    }
+    constexpr bool operator>(const Cycles& right) const {
+        return count > right.count;
+    }
+    constexpr Cycles operator+(const Cycles& right) const {
+        return Cycles(count + right.count);
+    }
+    constexpr Cycles operator-(const Cycles& right) const {
+        return Cycles(count - right.count);
+    }
 
 private:
     s64 count;
 };
 
-class SchedulerCore;
-class Thread;
+struct Ticks {
+    constexpr explicit Ticks(s64 _count) : count(_count) {}
+    constexpr explicit operator s64() {
+        return count;
+    }
+    constexpr Ticks(std::chrono::nanoseconds ns)
+        : count(ns.count() * BASE_CLOCK_RATE_ARM11 / 1000000000) {}
+    constexpr Ticks(Cycles cycles, float scale_factor)
+        : count(static_cast<s64>(s64(cycles) / scale_factor)) {}
+
+    constexpr bool operator<(const Ticks& right) const {
+        return count < right.count;
+    }
+    constexpr bool operator>(const Ticks& right) const {
+        return count > right.count;
+    }
+    constexpr Ticks operator+(const Ticks& right) const {
+        return Ticks(count + right.count);
+    }
+    constexpr Ticks operator-(const Ticks& right) const {
+        return Ticks(count - right.count);
+    }
+
+private:
+    s64 count;
+};
+
+class Kernel::ThreadManager;
+class Kernel::Thread;
+
+namespace Core {
+
+class Event {
+public:
+    virtual const std::string& Name() = 0;
+    virtual void Execute(u64 userdata, Ticks cycles_late) = 0;
+};
 
 class Scheduler {
 
 public:
-    Scheduler& GetCore(int core_id) const;
-    void ScheduleEvent(Core::TimingEventType* event, Cycles cycles_into_future);
+    Kernel::ThreadManager& GetCore(int core_id) const;
+    void ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userdata = 0);
     void RunSlice();
-    u64 Ticks() const;
+    Ticks Time_LB() const;
+    Ticks Time_UB() const;
+    Ticks Time_Current() const;
 
 private:
-    struct Event {
-        Core::TimingEventType* event_type;
-        s64 cycles;
+    struct EventInstance {
+        Event* event_type;
+        Ticks time;
+        u64 userdata;
 
-        bool operator>(const Event& right) const {
-            return cycles > right.cycles;
-        }
-        bool operator<(const Event& right) const {
-            return cycles < right.cycles;
+        bool operator<(const EventInstance& right) const {
+            return time < right.time;
         }
     };
 
-    s64 TimeToNextEvent() const;
+    Ticks TimeToNextEvent() const;
+
+    Kernel::ThreadManager& ThreadManager() {
+        return cores[current_core_id];
+    }
+
+    const Kernel::ThreadManager& ThreadManager() const {
+        return cores[current_core_id];
+    }
 
     u8 current_core_id;
-    std::vector<SchedulerCore> cores;
-    std::vector<Event> event_heap;
-    s64 current_slice_length;
-    s64 max_core_time;
+    std::vector<Kernel::ThreadManager> cores;
+    std::vector<EventInstance> event_heap;
+    Ticks current_slice_length;
+    Ticks max_core_time;
 
-    friend class SchedulerCore;
+    friend class Kernel::ThreadManager;
 };
 
-class Thread : public Kernel::WaitObject {
+} // namespace Core
+
+namespace Kernel {
+
+class Thread : public WaitObject {
 
 public:
-    enum Status { Created, Ready, Running, Yielding, Waiting, Destroyed };
+    enum Status { Running, Ready, WaitSleep, WaitSyncAll, WaitSyncAny, Created, Destroyed };
 
-    explicit Thread(SchedulerCore& core);
+    explicit Thread(ThreadManager& core);
     virtual ~Thread();
 
-    bool operator>(Thread& right) const {
-        return (status * 10000 - priority) > (right.status * 10000 - right.priority);
+    bool operator<(Thread& right) const {
+        return Order() < right.Order();
     }
 
     void WaitObjectReady(Kernel::WaitObject* object);
@@ -74,20 +130,35 @@ public:
     }
 
 private:
+    int Order() const {
+        return status * 64 + priority;
+    }
+
+    class WakeupEvent;
+
     u32 sequential_id;
-    SchedulerCore& core;
-    Status status;
+    ThreadManager& core;
+    Status status = Status::Created;
     std::unique_ptr<ARM_Interface::ThreadContext> context;
     std::vector<Kernel::WaitObject*> waiting_on;
-    u32 priority;
+    bool wait_all;
+    u32 priority = ThreadPriority::Default;
+    std::shared_ptr<Kernel::Process> process;
+    std::unique_ptr<WakeupEvent> wakeup_event;
 
-    friend class SchedulerCore;
+    // TODO: Nominal priority + priority boost
+    // TODO: Context initialization
+    // TODO: TLS
+
+    void WakeUp() {}
+
+    friend class ThreadManager;
 };
 
-class SchedulerCore {
+class ThreadManager {
 
 public:
-    explicit SchedulerCore(int core_id);
+    explicit ThreadManager(int core_id);
 
     void WaitOne(Kernel::WaitObject* object);
     void WaitAny(std::vector<Kernel::WaitObject*> objects);
@@ -97,47 +168,52 @@ public:
     void Stop();
 
     bool Reschedule();
-    Cycles RunSegment(Cycles instruction_count);
+    Ticks RunSegment(Ticks segment_length);
 
-    Kernel::Process& Process() const;
-    Kernel::Thread& Thread() const;
-    ARM_Interface& CPU() const;
-    u64 Ticks() const;
+    Kernel::Process& Process() {
+        return *thread->process;
+    }
+    const Kernel::Process& Process() const {
+        return *thread->process;
+    }
+    Kernel::Thread& Thread() {
+        return *thread;
+    }
+    const Kernel::Thread& Thread() const {
+        return *thread;
+    }
+    ARM_Interface& CPU() {
+        return *cpu;
+    }
+    const ARM_Interface& CPU() const {
+        return *cpu;
+    }
 
-    void AddTicks(s64 count) {
-        cycles_remaining -= count;
+    void AddCycles(Cycles count) {
+        cycles_remaining = cycles_remaining - count;
     }
 
 private:
     int core_id;
-    Scheduler& root;
-    Core::Thread* thread;
-    std::vector<Core::Thread*> thread_heap;
-    std::vector<Core::Thread*> thread_list;
-    s64 cycles_remaining;
-    s64 delay_cycles;
+    Core::Scheduler& root;
+    Kernel::Thread* thread;
+    std::unique_ptr<ARM_Interface> cpu;
+    std::vector<Kernel::Thread*> thread_heap;
+    Cycles cycles_remaining;
+    Cycles delay_cycles;
+    ::Ticks segment_end;
 
     bool CanCutSlice() const {
         return core_id == 0;
     }
     void EndBlock();
 
-    u32 GetSequentialIndex(Core::Thread* thread) {
-        auto it = std::find(thread_list.begin(), thread_list.end(), nullptr);
-        if (it == thread_list.end()) {
-            thread_list.push_back(thread);
-        } else {
-            *it = thread;
-        }
-        return thread_list.begin() - it;
-    }
+    bool AllThreadsIdle() const;
 
-    void RemoveThread(Core::Thread* thread) {
-        thread_list[thread->sequential_id] = nullptr;
-    }
+    void RemoveThread(Kernel::Thread* thread);
 
-    friend class Scheduler;
+    friend class Core::Scheduler;
     friend class Thread;
 };
 
-} // namespace Core
+} // namespace Kernel
