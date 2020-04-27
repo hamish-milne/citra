@@ -15,8 +15,9 @@ void Scheduler::RunSlice() {
 
     // Run events scheduled for 'now'. Threshold chosen to reduce small slices.
     while (TimeToNextEvent() < Ticks(100)) {
-        auto next_event = event_heap.front();
+        auto next_event = events.top();
         next_event.event_type->Execute(next_event.userdata, Time_Current() - next_event.time);
+        events.pop();
     }
     // the max slice time is fairly arbitrary, as it represents the largest duration by which cores
     // can be out of sync. The real maximum value without sacrificing accuracy will depend on
@@ -27,7 +28,7 @@ void Scheduler::RunSlice() {
         current_slice_length = TimeToNextEvent();
     }
     // No cores have run yet, so it's OK to schedule any events we want during this segment
-    max_core_time = Ticks(0);
+    max_core_time = Time_LB();
     for (auto& core : cores) {
         auto cycles_run = core.RunSegment(current_slice_length);
         // Uniquely for the first core, we cut the slice if an event was scheduled before the
@@ -43,10 +44,10 @@ void Scheduler::RunSlice() {
 }
 
 Ticks Scheduler::TimeToNextEvent() const {
-    if (event_heap.empty()) {
+    if (events.empty()) {
         return Ticks(std::numeric_limits<s64>::max);
     }
-    return event_heap.front().time - Time_LB();
+    return events.top().time - Time_LB();
 }
 
 void Scheduler::ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userdata) {
@@ -74,13 +75,20 @@ void Scheduler::ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userda
 
     // Push the resultant event onto the heap
     auto scheduled_time = Time_Current() + cycles_into_future;
-    event_heap.emplace_back(EventInstance{event, scheduled_time, userdata});
-    std::push_heap(event_heap.begin(), event_heap.end());
+    events.emplace(EventInstance{event, scheduled_time, userdata});
 }
 
 } // namespace Core
 
 namespace Kernel {
+
+std::shared_ptr<Thread> ThreadManager::CreateThread(
+    std::string name, VAddr entry_point, u32 priority, u32 arg, VAddr stack_top,
+    std::shared_ptr<Kernel::Process> owner_process) {
+    auto thread = new Kernel::Thread(*this, std::move(name), std::move(owner_process));
+    thread->context->SetPC(entry_point);
+    return {thread};
+}
 
 class Thread::WakeupEvent : public Core::Event {
     Thread& parent;
@@ -93,14 +101,14 @@ public:
     }
 
     void Execute(u64 userdata, Ticks cycles_late) {
-        if (parent.status == Status::WaitSleep) {
-            parent.status = Status::Ready;
-        }
+        parent.WakeUp();
     }
 };
 
-Thread::Thread(ThreadManager& core_)
-    : Kernel::WaitObject(nullptr), core(core_), wakeup_event(new Thread::WakeupEvent(*this)) {}
+Thread::Thread(ThreadManager& core_, std::string name_, std::shared_ptr<Kernel::Process> process_)
+    : Kernel::WaitObject(nullptr), core(core_), name(std::move(name_)),
+      wakeup_event(new Thread::WakeupEvent(*this)), process(std::move(process_)),
+      context(core.cpu->NewContext()) {}
 
 Thread::~Thread() {
     core.RemoveThread(this);
@@ -115,7 +123,7 @@ Ticks ThreadManager::RunSegment(::Ticks segment_length) {
             CPU().Run(cycles_remaining);
         } else {
             // If idle, just advance time by the requested cycle count
-            cycles_remaining = 0;
+            cycles_remaining = Cycles(0);
         }
         // Un-defer any cycles from the last sub-segment
         cycles_remaining = cycles_remaining + defer_cycles;
@@ -140,52 +148,29 @@ Ticks ThreadManager::RunSegment(::Ticks segment_length) {
 }
 
 bool ThreadManager::Reschedule() {
-    while (true) {
-        // The 3ds uses cooperative multithreading. Never interrupt a thread that's already running.
-        if (thread->status == Thread::Status::Running) {
-            return true;
-        }
 
-        // Order the threads by status and priority
-        std::make_heap(thread_heap.begin(), thread_heap.end());
-
-        // If there are no threads, end the block
-        auto next_thread = thread_heap.begin();
-        if (next_thread == thread_heap.end()) {
-            break;
-        }
-
-        // If there was no change, we're good!
-        if (*next_thread == thread) {
-            return true;
-        }
-
-        // If the next candidate thread isn't ready, try executing events to wake it up
-        if ((*next_thread)->status != Thread::Status::Ready) {
-            auto next_event = root.event_heap.begin();
-            if (next_event == root.event_heap.end()) {
-                break;
-            }
-            if (next_event->time > segment_end) {
-                break;
-            }
-            auto event = *next_event;
-            std::pop_heap(root.event_heap.begin(), root.event_heap.end());
-            AddCycles(Cycles(event.time - root.Time_Current(), 1.0));
-            event.event_type->Execute(event.userdata, Ticks(0));
-            continue;
-        }
-
-        // Now that we've found us a thread to run, we can change the CPU context inline
-        CPU().SaveContext(thread->context);
-        thread = *next_thread;
-        CPU().LoadContext(thread->context);
+    // The 3ds uses cooperative multithreading. Never interrupt a thread that's already running.
+    if (thread->status == Thread::Status::Running) {
         return true;
     }
 
-    // Otherwise, end the block now as there's nothing for the CPU to do.
-    EndBlock();
-    return false;
+    // If there are no threads ready, end the block
+    auto next_thread = thread_heap.begin();
+    if (next_thread == thread_heap.end() || (*next_thread)->status != Thread::Status::Ready) {
+        EndBlock();
+        return false;
+    }
+
+    // If there was no change, we're good!
+    if (*next_thread == thread) {
+        return true;
+    }
+
+    // Now that we've found us a thread to run, we can change the CPU context inline
+    CPU().SaveContext(thread->context);
+    thread = *next_thread;
+    CPU().LoadContext(thread->context);
+    return true;
 }
 
 bool ThreadManager::AllThreadsIdle() const {
@@ -201,7 +186,12 @@ void ThreadManager::EndBlock() {
 
 void ThreadManager::RemoveThread(Kernel::Thread* thread) {
     std::remove(thread_heap.begin(), thread_heap.end(), thread);
-    // TODO: Also sort here?
+    std::make_heap(thread_heap.begin(), thread_heap.end());
+}
+
+void Thread::SetStatus(Thread::Status status) {
+    this->status = status;
+    std::make_heap(core.thread_heap.begin(), core.thread_heap.end());
 }
 
 void ThreadManager::WaitOne(Kernel::WaitObject* object) {
@@ -213,9 +203,8 @@ void ThreadManager::WaitOne(Kernel::WaitObject* object) {
     }
 
     thread->waiting_on = {object};
-    thread->wait_all = false;
     object->AddWaitingThread(Kernel::SharedFrom(thread));
-    thread->status = Thread::Status::WaitSyncAll;
+    thread->SetStatus(Thread::Status::WaitSyncAll);
     Reschedule();
     return;
 }
@@ -232,11 +221,10 @@ void ThreadManager::WaitAny(std::vector<Kernel::WaitObject*> objects) {
     }
 
     thread->waiting_on = objects;
-    thread->wait_all = false;
     for (auto obj : objects) {
         obj->AddWaitingThread(Kernel::SharedFrom(thread));
     }
-    thread->status = Thread::Status::WaitSyncAny;
+    thread->SetStatus(Thread::Status::WaitSyncAny);
     Reschedule();
     return;
 }
@@ -244,12 +232,11 @@ void ThreadManager::WaitAny(std::vector<Kernel::WaitObject*> objects) {
 void ThreadManager::WaitAll(std::vector<Kernel::WaitObject*> objects) {
     ASSERT(thread->status == Thread::Status::Running);
     // TODO:
-    thread->wait_all = true;
 }
 
 void ThreadManager::Sleep() {
     ASSERT(thread->status == Thread::Status::Running);
-    thread->status = Thread::Status::WaitSleep;
+    thread->SetStatus(Thread::Status::WaitSleep);
     Reschedule();
 }
 
@@ -257,9 +244,9 @@ void ThreadManager::Sleep(std::chrono::nanoseconds duration) {
     ASSERT(thread->status == Thread::Status::Running);
     if (duration.count() > 0) {
         root.ScheduleEvent(thread->wakeup_event.get(), duration);
-        thread->status = Thread::Status::WaitSleep;
+        thread->SetStatus(Thread::Status::WaitSleep);
     } else {
-        thread->status = Thread::Status::Ready;
+        thread->SetStatus(Thread::Status::Ready);
     }
     Reschedule();
 }
@@ -270,15 +257,29 @@ void Thread::WaitObjectReady(Kernel::WaitObject* object) {
         if (status == Status::WaitSyncAll) {
             if (waiting_on.empty()) {
                 context->SetCpuRegister(0, RESULT_SUCCESS.raw);
-                status == Thread::Status::Ready;
+                status = Thread::Status::Ready;
+                // TODO: Sort
             }
         } else {
             auto idx = it - waiting_on.begin();
             context->SetCpuRegister(0, RESULT_SUCCESS.raw);
             context->SetCpuRegister(1, static_cast<u32>(idx));
             waiting_on.clear();
-            status == Thread::Status::Ready;
+            status = Thread::Status::Ready;
+            // TODO: Sort
         }
+    }
+}
+
+void Thread::WakeUp() {
+    switch (status) {
+    case Status::WaitSyncAny:
+        context->SetCpuRegister(1, 0);
+    case Status::WaitSyncAll:
+        context->SetCpuRegister(0, RESULT_TIMEOUT.raw);
+    case Status::WaitSleep:
+        status = Thread::Status::Ready;
+        // TODO: Sort
     }
 }
 

@@ -1,6 +1,7 @@
 
 
 #include <vector>
+#include <queue>
 #include "core/arm/arm_interface.h"
 #include "core/hle/kernel/process.h"
 #include "core/hle/kernel/wait_object.h"
@@ -84,8 +85,8 @@ private:
         Ticks time;
         u64 userdata;
 
-        bool operator<(const EventInstance& right) const {
-            return time < right.time;
+        bool operator>(const EventInstance& right) const {
+            return time > right.time;
         }
     };
 
@@ -99,9 +100,12 @@ private:
         return cores[current_core_id];
     }
 
+    template <typename T>
+    using min_queue = std::priority_queue<T, std::vector<T>, std::greater<T>>;
+
     u8 current_core_id;
     std::vector<Kernel::ThreadManager> cores;
-    std::vector<EventInstance> event_heap;
+    min_queue<EventInstance> events;
     Ticks current_slice_length;
     Ticks max_core_time;
 
@@ -115,13 +119,15 @@ namespace Kernel {
 class Thread : public WaitObject {
 
 public:
-    enum Status { Running, Ready, WaitSleep, WaitSyncAll, WaitSyncAny, Created, Destroyed };
+    enum Status : u32 { Running, Ready, WaitSleep, WaitSyncAll, WaitSyncAny, Created, Destroyed };
+    enum Priority : u32 { Min = 0, Default = 23, Max = 64 };
 
-    explicit Thread(ThreadManager& core);
+    explicit Thread(ThreadManager& core, std::string name,
+                    std::shared_ptr<Kernel::Process> process);
     virtual ~Thread();
 
-    bool operator<(Thread& right) const {
-        return Order() < right.Order();
+    bool operator>(Thread& right) const {
+        return Order() > right.Order();
     }
 
     void WaitObjectReady(Kernel::WaitObject* object);
@@ -131,26 +137,28 @@ public:
 
 private:
     int Order() const {
-        return status * 64 + priority;
+        return status * Priority::Max + priority;
     }
 
     class WakeupEvent;
 
-    u32 sequential_id;
     ThreadManager& core;
+    const std::string name;
+    const std::unique_ptr<ARM_Interface::ThreadContext> context;
+    const std::shared_ptr<Kernel::Process> process;
+    const std::unique_ptr<WakeupEvent> wakeup_event;
+
+    std::vector<Kernel::WaitObject*> waiting_on{};
     Status status = Status::Created;
-    std::unique_ptr<ARM_Interface::ThreadContext> context;
-    std::vector<Kernel::WaitObject*> waiting_on;
-    bool wait_all;
-    u32 priority = ThreadPriority::Default;
-    std::shared_ptr<Kernel::Process> process;
-    std::unique_ptr<WakeupEvent> wakeup_event;
+    u32 priority = Priority::Default;
 
     // TODO: Nominal priority + priority boost
     // TODO: Context initialization
     // TODO: TLS
 
-    void WakeUp() {}
+    void WakeUp();
+
+    void SetStatus(Status status);
 
     friend class ThreadManager;
 };
@@ -189,6 +197,10 @@ public:
         return *cpu;
     }
 
+    std::shared_ptr<Kernel::Thread> CreateThread(std::string name, VAddr entry_point, u32 priority,
+                                                 u32 arg, VAddr stack_top,
+                                                 std::shared_ptr<Kernel::Process> owner_process);
+
     void AddCycles(Cycles count) {
         cycles_remaining = cycles_remaining - count;
     }
@@ -209,7 +221,6 @@ private:
     void EndBlock();
 
     bool AllThreadsIdle() const;
-
     void RemoveThread(Kernel::Thread* thread);
 
     friend class Core::Scheduler;
