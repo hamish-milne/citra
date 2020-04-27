@@ -3,9 +3,16 @@
 #include <limits>
 #include "common/assert.h"
 #include "core/core_timing.h"
+#include "core/hle/kernel/errors.h"
 #include "scheduler.h"
 
 namespace Core {
+
+Scheduler::Scheduler(u32 core_count, std::function<ARM_Interface*()> constructor) {
+    for (u32 i = 0; i < core_count; i++) {
+        cores.emplace_back(i, std::unique_ptr<ARM_Interface>(constructor()));
+    }
+}
 
 void Scheduler::RunSlice() {
     // We assume:
@@ -30,6 +37,7 @@ void Scheduler::RunSlice() {
     // No cores have run yet, so it's OK to schedule any events we want during this segment
     max_core_time = Time_LB();
     for (auto& core : cores) {
+        current_core_id = core.core_id;
         auto cycles_run = core.RunSegment(current_slice_length);
         // Uniquely for the first core, we cut the slice if an event was scheduled before the
         // segment's end. This allows other cores to respond to events scheduled on it. For
@@ -82,11 +90,83 @@ void Scheduler::ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userda
 
 namespace Kernel {
 
+/**
+ * Finds a free location for the TLS section of a thread.
+ * @param tls_slots The TLS page array of the thread's owner process.
+ * Returns a tuple of (page, slot, alloc_needed) where:
+ * page: The index of the first allocated TLS page that has free slots.
+ * slot: The index of the first free slot in the indicated page.
+ * alloc_needed: Whether there's a need to allocate a new TLS page (All pages are full).
+ */
+static std::tuple<std::size_t, std::size_t, bool> GetFreeThreadLocalSlot(
+    const std::vector<std::bitset<8>>& tls_slots) {
+    // Iterate over all the allocated pages, and try to find one where not all slots are used.
+    for (std::size_t page = 0; page < tls_slots.size(); ++page) {
+        const auto& page_tls_slots = tls_slots[page];
+        if (!page_tls_slots.all()) {
+            // We found a page with at least one free slot, find which slot it is
+            for (std::size_t slot = 0; slot < page_tls_slots.size(); ++slot) {
+                if (!page_tls_slots.test(slot)) {
+                    return std::make_tuple(page, slot, false);
+                }
+            }
+        }
+    }
+
+    return std::make_tuple(0, 0, true);
+}
+
+static std::optional<VAddr> AllocateTLS(KernelSystem& kernel, Process& process) {
+    // Find the next available TLS index, and mark it as used
+    auto& tls_slots = process.tls_slots;
+
+    auto [available_page, available_slot, needs_allocation] = GetFreeThreadLocalSlot(tls_slots);
+
+    if (needs_allocation) {
+        // There are no already-allocated pages with free slots, lets allocate a new one.
+        // TLS pages are allocated from the BASE region in the linear heap.
+        auto memory_region = kernel.GetMemoryRegion(MemoryRegion::BASE);
+
+        // Allocate some memory from the end of the linear heap for this region.
+        auto offset = memory_region->LinearAllocate(Memory::PAGE_SIZE);
+        if (!offset) {
+            LOG_ERROR(Kernel_SVC,
+                      "Not enough space in region to allocate a new TLS page for thread");
+            return {};
+        }
+        process.memory_used += Memory::PAGE_SIZE;
+
+        tls_slots.emplace_back(0); // The page is completely available at the start
+        available_page = tls_slots.size() - 1;
+        available_slot = 0; // Use the first slot in the new page
+
+        auto& vm_manager = process.vm_manager;
+
+        // Map the page to the current process' address space.
+        vm_manager.MapBackingMemory(Memory::TLS_AREA_VADDR + available_page * Memory::PAGE_SIZE,
+                                    kernel.memory.GetFCRAMRef(*offset), Memory::PAGE_SIZE,
+                                    MemoryState::Locked);
+    }
+
+    // Mark the slot as used
+    tls_slots[available_page].set(available_slot);
+    auto tls_address = Memory::TLS_AREA_VADDR + available_page * Memory::PAGE_SIZE +
+                       available_slot * Memory::TLS_ENTRY_SIZE;
+
+    kernel.memory.ZeroBlock(process, tls_address, Memory::TLS_ENTRY_SIZE);
+    return tls_address;
+}
+
 std::shared_ptr<Thread> ThreadManager::CreateThread(
     std::string name, VAddr entry_point, u32 priority, u32 arg, VAddr stack_top,
     std::shared_ptr<Kernel::Process> owner_process) {
-    auto thread = new Kernel::Thread(*this, std::move(name), std::move(owner_process));
-    thread->context->SetPC(entry_point);
+    auto tls_address = AllocateTLS(Core::System::GetInstance()->kernel, *owner_process);
+    auto thread = new Kernel::Thread(*this, std::move(name), std::move(owner_process), tls_address);
+    auto& context = *thread->context;
+    context.SetCpuRegister(0, arg);
+    context.SetProgramCounter(entry_point);
+    context.SetStackPointer(stack_top);
+    context.SetCpsr(USER32MODE | ((entry_point & 1) << 5)); // Usermode and THUMB mode
     return {thread};
 }
 
@@ -105,13 +185,20 @@ public:
     }
 };
 
-Thread::Thread(ThreadManager& core_, std::string name_, std::shared_ptr<Kernel::Process> process_)
+Thread::Thread(ThreadManager& core_, std::string name_, std::shared_ptr<Kernel::Process> process_,
+               VAddr tls_address_)
     : Kernel::WaitObject(nullptr), core(core_), name(std::move(name_)),
       wakeup_event(new Thread::WakeupEvent(*this)), process(std::move(process_)),
-      context(core.cpu->NewContext()) {}
+      context(core.cpu->NewContext()), tls_address(tls_address_) {}
 
 Thread::~Thread() {
     core.RemoveThread(this);
+
+    // Mark the TLS slot in the thread's page as free.
+    u32 tls_page = (tls_address - Memory::TLS_AREA_VADDR) / Memory::PAGE_SIZE;
+    u32 tls_slot =
+        ((tls_address - Memory::TLS_AREA_VADDR) % Memory::PAGE_SIZE) / Memory::TLS_ENTRY_SIZE;
+    process->tls_slots[tls_page].reset(tls_slot);
 }
 
 Ticks ThreadManager::RunSegment(::Ticks segment_length) {
@@ -170,6 +257,7 @@ bool ThreadManager::Reschedule() {
     CPU().SaveContext(thread->context);
     thread = *next_thread;
     CPU().LoadContext(thread->context);
+    cpu->SetCP15Register(CP15_THREAD_URO, thread->tls_address);
     return true;
 }
 
@@ -194,30 +282,56 @@ void Thread::SetStatus(Thread::Status status) {
     std::make_heap(core.thread_heap.begin(), core.thread_heap.end());
 }
 
-void ThreadManager::WaitOne(Kernel::WaitObject* object) {
+ResultCode ThreadManager::WaitOne(Kernel::WaitObject* object, std::chrono::nanoseconds timeout) {
     ASSERT(thread->status == Thread::Status::Running);
+
+    // Check if we can sync immediately
     if (!object->ShouldWait(thread)) {
         object->Acquire(thread);
-        // TODO: Sync result
-        return;
+        thread->context->SetCpuRegister(0, RESULT_SUCCESS.raw);
+        return RESULT_SUCCESS;
     }
 
+    // Schedule the timeout
+    if (timeout.count == 0) {
+        return RESULT_TIMEOUT;
+    } else {
+        root.ScheduleEvent(thread->wakeup_event.get(), timeout);
+    }
+
+    // Wait on the object
     thread->waiting_on = {object};
     object->AddWaitingThread(Kernel::SharedFrom(thread));
     thread->SetStatus(Thread::Status::WaitSyncAll);
     Reschedule();
-    return;
+    return RESULT_SUCCESS;
 }
 
-void ThreadManager::WaitAny(std::vector<Kernel::WaitObject*> objects) {
+ResultCode ThreadManager::WaitAny(std::vector<Kernel::WaitObject*> objects,
+                                  std::chrono::nanoseconds timeout) {
     ASSERT(thread->status == Thread::Status::Running);
+
+    // Check if we can sync immediately
     auto active_obj =
         std::find_if(objects.begin(), objects.end(),
                      [this](const Kernel::WaitObject* obj) { return !obj->ShouldWait(thread); });
     if (active_obj != objects.end()) {
         (*active_obj)->Acquire(thread);
-        // TODO: Sync result
-        return;
+        thread->context->SetCpuRegister(0, RESULT_SUCCESS.raw);
+        thread->context->SetCpuRegister(1, active_obj - objects.begin());
+        return RESULT_SUCCESS;
+    }
+
+    // Schedule the timeout
+    if (timeout.count == 0) {
+        auto inactive_obj =
+            std::find_if(objects.begin(), objects.end(),
+                         [this](const Kernel::WaitObject* obj) { return obj->ShouldWait(thread); });
+        if (inactive_obj != objects.end()) {
+            return RESULT_TIMEOUT;
+        }
+    } else {
+        root.ScheduleEvent(thread->wakeup_event.get(), timeout);
     }
 
     thread->waiting_on = objects;
@@ -226,12 +340,46 @@ void ThreadManager::WaitAny(std::vector<Kernel::WaitObject*> objects) {
     }
     thread->SetStatus(Thread::Status::WaitSyncAny);
     Reschedule();
-    return;
+    return RESULT_SUCCESS;
 }
 
-void ThreadManager::WaitAll(std::vector<Kernel::WaitObject*> objects) {
+ResultCode ThreadManager::WaitAll(std::vector<Kernel::WaitObject*> objects,
+                                  std::chrono::nanoseconds timeout) {
     ASSERT(thread->status == Thread::Status::Running);
-    // TODO:
+
+    // Check if we can sync immediately
+    auto inactive_obj =
+        std::find_if(objects.begin(), objects.end(),
+                     [this](const Kernel::WaitObject* obj) { return obj->ShouldWait(thread); });
+    if (inactive_obj == objects.end()) {
+        for (auto obj : objects) {
+            obj->Acquire(thread);
+        }
+        thread->context->SetCpuRegister(0, RESULT_SUCCESS.raw);
+        return RESULT_SUCCESS;
+    }
+
+    // Schedule the timeout
+    if (timeout.count == 0) {
+        auto active_obj =
+            std::find_if(objects.begin(), objects.end(), [this](const Kernel::WaitObject* obj) {
+                return !obj->ShouldWait(thread);
+            });
+        if (active_obj == objects.end()) {
+            return RESULT_TIMEOUT;
+        }
+    } else {
+        root.ScheduleEvent(thread->wakeup_event.get(), timeout);
+    }
+
+    // Wait on the objects
+    thread->waiting_on = objects;
+    for (auto obj : objects) {
+        obj->AddWaitingThread(Kernel::SharedFrom(thread));
+    }
+    thread->SetStatus(Thread::Status::WaitSyncAll);
+    Reschedule();
+    return RESULT_SUCCESS;
 }
 
 void ThreadManager::Sleep() {
@@ -249,6 +397,12 @@ void ThreadManager::Sleep(std::chrono::nanoseconds duration) {
         thread->SetStatus(Thread::Status::Ready);
     }
     Reschedule();
+}
+
+void ThreadManager::Stop() {
+    ASSERT(thread->status == Thread::Status::Running);
+    thread->status = Thread::Status::Destroyed;
+    RemoveThread(thread);
 }
 
 void Thread::WaitObjectReady(Kernel::WaitObject* object) {

@@ -72,11 +72,15 @@ public:
 class Scheduler {
 
 public:
+    Scheduler(u32 core_count, std::function<ARM_Interface*()> constructor);
+
     Kernel::ThreadManager& GetCore(int core_id) const;
     void ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userdata = 0);
     void RunSlice();
     Ticks Time_LB() const;
-    Ticks Time_UB() const;
+    Ticks Time_UB() const {
+        return max_core_time;
+    }
     Ticks Time_Current() const;
 
 private:
@@ -106,8 +110,8 @@ private:
     u8 current_core_id;
     std::vector<Kernel::ThreadManager> cores;
     min_queue<EventInstance> events;
-    Ticks current_slice_length;
-    Ticks max_core_time;
+    Ticks current_slice_length{0};
+    Ticks max_core_time{0};
 
     friend class Kernel::ThreadManager;
 };
@@ -122,8 +126,8 @@ public:
     enum Status : u32 { Running, Ready, WaitSleep, WaitSyncAll, WaitSyncAny, Created, Destroyed };
     enum Priority : u32 { Min = 0, Default = 23, Max = 64 };
 
-    explicit Thread(ThreadManager& core, std::string name,
-                    std::shared_ptr<Kernel::Process> process);
+    explicit Thread(ThreadManager& core, std::string name, std::shared_ptr<Kernel::Process> process,
+                    VAddr tls_address);
     virtual ~Thread();
 
     bool operator>(Thread& right) const {
@@ -147,18 +151,18 @@ private:
     const std::unique_ptr<ARM_Interface::ThreadContext> context;
     const std::shared_ptr<Kernel::Process> process;
     const std::unique_ptr<WakeupEvent> wakeup_event;
+    const VAddr tls_address;
 
     std::vector<Kernel::WaitObject*> waiting_on{};
     Status status = Status::Created;
     u32 priority = Priority::Default;
 
     // TODO: Nominal priority + priority boost
-    // TODO: Context initialization
-    // TODO: TLS
 
     void WakeUp();
 
     void SetStatus(Status status);
+    std::optional<VAddr> AllocateTLS(KernelSystem& kernel);
 
     friend class ThreadManager;
 };
@@ -166,17 +170,14 @@ private:
 class ThreadManager {
 
 public:
-    explicit ThreadManager(int core_id);
+    explicit ThreadManager(u32 core_id, std::unique_ptr<ARM_Interface> cpu);
 
-    void WaitOne(Kernel::WaitObject* object);
-    void WaitAny(std::vector<Kernel::WaitObject*> objects);
-    void WaitAll(std::vector<Kernel::WaitObject*> objects);
-    void Sleep();
+    ResultCode WaitOne(Kernel::WaitObject* object, std::chrono::nanoseconds timeout);
+    ResultCode WaitAny(std::vector<Kernel::WaitObject*> objects, std::chrono::nanoseconds timeout);
+    ResultCode WaitAll(std::vector<Kernel::WaitObject*> objects, std::chrono::nanoseconds timeout);
     void Sleep(std::chrono::nanoseconds nanoseconds);
+    void Sleep();
     void Stop();
-
-    bool Reschedule();
-    Ticks RunSegment(Ticks segment_length);
 
     Kernel::Process& Process() {
         return *thread->process;
@@ -206,14 +207,17 @@ public:
     }
 
 private:
-    int core_id;
+    u32 core_id;
     Core::Scheduler& root;
     Kernel::Thread* thread;
     std::unique_ptr<ARM_Interface> cpu;
     std::vector<Kernel::Thread*> thread_heap;
-    Cycles cycles_remaining;
-    Cycles delay_cycles;
-    ::Ticks segment_end;
+    Cycles cycles_remaining{0};
+    Cycles delay_cycles{0};
+    ::Ticks segment_end{0};
+
+    bool Reschedule();
+    Ticks RunSegment(Ticks segment_length);
 
     bool CanCutSlice() const {
         return core_id == 0;
