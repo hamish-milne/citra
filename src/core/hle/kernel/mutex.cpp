@@ -18,15 +18,6 @@ SERIALIZE_EXPORT_IMPL(Kernel::Mutex)
 
 namespace Kernel {
 
-void ReleaseThreadMutexes(Thread* thread) {
-    for (auto& mtx : thread->held_mutexes) {
-        mtx->lock_count = 0;
-        mtx->holding_thread = nullptr;
-        mtx->WakeupAllWaitingThreads();
-    }
-    thread->held_mutexes.clear();
-}
-
 Mutex::Mutex(KernelSystem& kernel) : WaitObject(kernel), kernel(kernel) {}
 Mutex::~Mutex() {}
 
@@ -53,7 +44,6 @@ void Mutex::Acquire(Thread* thread) {
 
     // Actually "acquire" the mutex only if we don't already have it
     if (lock_count == 0) {
-        priority = thread->current_priority;
         thread->held_mutexes.insert(SharedFrom(this));
         holding_thread = SharedFrom(thread);
         thread->UpdatePriority();
@@ -86,42 +76,40 @@ ResultCode Mutex::Release(Thread* thread) {
 
     // Yield to the next thread only if we've fully released the mutex
     if (lock_count == 0) {
-        holding_thread->held_mutexes.erase(SharedFrom(this));
-        holding_thread->UpdatePriority();
+        holding_thread->OnReleaseMutex(this);
         holding_thread = nullptr;
-        WakeupAllWaitingThreads();
-        kernel.PrepareReschedule();
+        NotifyAvailable();
     }
 
     return RESULT_SUCCESS;
 }
 
-void Mutex::AddWaitingThread(std::shared_ptr<Thread> thread) {
-    WaitObject::AddWaitingThread(thread);
-    thread->pending_mutexes.insert(SharedFrom(this));
-    UpdatePriority();
-}
+// void Mutex::AddWaitingThread(std::shared_ptr<Thread> thread) {
+//     WaitObject::AddWaitingThread(thread);
+//     thread->pending_mutexes.insert(SharedFrom(this));
+//     UpdatePriority();
+// }
 
-void Mutex::RemoveWaitingThread(Thread* thread) {
-    WaitObject::RemoveWaitingThread(thread);
-    thread->pending_mutexes.erase(SharedFrom(this));
-    UpdatePriority();
-}
+// void Mutex::RemoveWaitingThread(Thread* thread) {
+//     WaitObject::RemoveWaitingThread(thread);
+//     thread->pending_mutexes.erase(SharedFrom(this));
+//     UpdatePriority();
+// }
 
-void Mutex::UpdatePriority() {
-    if (!holding_thread)
-        return;
+// void Mutex::UpdatePriority() {
+//     if (!holding_thread)
+//         return;
 
-    u32 best_priority = ThreadPrioLowest;
-    for (auto& waiter : GetWaitingThreads()) {
-        if (waiter->current_priority < best_priority)
-            best_priority = waiter->current_priority;
-    }
+//     u32 best_priority = ThreadPrioLowest;
+//     for (auto& waiter : GetWaitingThreads()) {
+//         if (waiter->current_priority < best_priority)
+//             best_priority = waiter->current_priority;
+//     }
 
-    if (best_priority != priority) {
-        priority = best_priority;
-        holding_thread->UpdatePriority();
-    }
-}
+//     if (best_priority != priority) {
+//         priority = best_priority;
+//         holding_thread->UpdatePriority();
+//     }
+// }
 
 } // namespace Kernel

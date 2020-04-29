@@ -4,6 +4,7 @@
 #include "common/assert.h"
 #include "core/core_timing.h"
 #include "core/hle/kernel/errors.h"
+#include "core/hle/kernel/mutex.h"
 #include "scheduler.h"
 
 namespace Core {
@@ -192,13 +193,7 @@ Thread::Thread(ThreadManager& core_, std::string name_, std::shared_ptr<Kernel::
       context(core.cpu->NewContext()), tls_address(tls_address_) {}
 
 Thread::~Thread() {
-    core.RemoveThread(this);
-
-    // Mark the TLS slot in the thread's page as free.
-    u32 tls_page = (tls_address - Memory::TLS_AREA_VADDR) / Memory::PAGE_SIZE;
-    u32 tls_slot =
-        ((tls_address - Memory::TLS_AREA_VADDR) % Memory::PAGE_SIZE) / Memory::TLS_ENTRY_SIZE;
-    process->tls_slots[tls_page].reset(tls_slot);
+    Stop();
 }
 
 Ticks ThreadManager::RunSegment(::Ticks segment_length) {
@@ -241,6 +236,9 @@ bool ThreadManager::Reschedule() {
         return true;
     }
 
+    // Sort the thread list to find the highest priority ready one
+    std::sort(thread_heap.begin(), thread_heap.end());
+
     // If there are no threads ready, end the block
     auto next_thread = thread_heap.begin();
     if (next_thread == thread_heap.end() || (*next_thread)->status != Thread::Status::Ready) {
@@ -272,15 +270,7 @@ void ThreadManager::EndBlock() {
     CPU().PrepareReschedule();
 }
 
-void ThreadManager::RemoveThread(Kernel::Thread* thread) {
-    std::remove(thread_heap.begin(), thread_heap.end(), thread);
-    std::make_heap(thread_heap.begin(), thread_heap.end());
-}
-
-void Thread::SetStatus(Thread::Status status) {
-    this->status = status;
-    std::make_heap(core.thread_heap.begin(), core.thread_heap.end());
-}
+void ThreadManager::RemoveThread(Kernel::Thread* thread) {}
 
 ResultCode ThreadManager::WaitOne(Kernel::WaitObject* object, std::chrono::nanoseconds timeout) {
     ASSERT(thread->status == Thread::Status::Running);
@@ -302,7 +292,7 @@ ResultCode ThreadManager::WaitOne(Kernel::WaitObject* object, std::chrono::nanos
     // Wait on the object
     thread->waiting_on = {object};
     object->AddWaitingThread(Kernel::SharedFrom(thread));
-    thread->SetStatus(Thread::Status::WaitSyncAll);
+    thread->status = Thread::Status::WaitSyncAll;
     Reschedule();
     return RESULT_SUCCESS;
 }
@@ -338,7 +328,7 @@ ResultCode ThreadManager::WaitAny(std::vector<Kernel::WaitObject*> objects,
     for (auto obj : objects) {
         obj->AddWaitingThread(Kernel::SharedFrom(thread));
     }
-    thread->SetStatus(Thread::Status::WaitSyncAny);
+    thread->status = Thread::Status::WaitSyncAny;
     Reschedule();
     return RESULT_SUCCESS;
 }
@@ -377,14 +367,14 @@ ResultCode ThreadManager::WaitAll(std::vector<Kernel::WaitObject*> objects,
     for (auto obj : objects) {
         obj->AddWaitingThread(Kernel::SharedFrom(thread));
     }
-    thread->SetStatus(Thread::Status::WaitSyncAll);
+    thread->status = Thread::Status::WaitSyncAll;
     Reschedule();
     return RESULT_SUCCESS;
 }
 
 void ThreadManager::Sleep() {
     ASSERT(thread->status == Thread::Status::Running);
-    thread->SetStatus(Thread::Status::WaitSleep);
+    thread->status = Thread::Status::WaitSleep;
     Reschedule();
 }
 
@@ -392,35 +382,80 @@ void ThreadManager::Sleep(std::chrono::nanoseconds duration) {
     ASSERT(thread->status == Thread::Status::Running);
     if (duration.count() > 0) {
         root.ScheduleEvent(thread->wakeup_event.get(), duration);
-        thread->SetStatus(Thread::Status::WaitSleep);
+        thread->status = Thread::Status::WaitSleep;
     } else {
-        thread->SetStatus(Thread::Status::Ready);
+        thread->status = Thread::Status::Ready;
     }
     Reschedule();
 }
 
 void ThreadManager::Stop() {
     ASSERT(thread->status == Thread::Status::Running);
-    thread->status = Thread::Status::Destroyed;
-    RemoveThread(thread);
+    thread->Stop();
 }
 
-void Thread::WaitObjectReady(Kernel::WaitObject* object) {
-    auto it = std::remove(waiting_on.begin(), waiting_on.end(), object);
-    if (it != waiting_on.end()) {
-        if (status == Status::WaitSyncAll) {
-            if (waiting_on.empty()) {
-                context->SetCpuRegister(0, RESULT_SUCCESS.raw);
-                status = Thread::Status::Ready;
-                // TODO: Sort
-            }
-        } else {
-            auto idx = it - waiting_on.begin();
-            context->SetCpuRegister(0, RESULT_SUCCESS.raw);
-            context->SetCpuRegister(1, static_cast<u32>(idx));
-            waiting_on.clear();
-            status = Thread::Status::Ready;
-            // TODO: Sort
+void Thread::Stop() {
+    if (status != Thread::Status::Destroyed) {
+        status = Thread::Status::Destroyed;
+
+        for (auto mutex : held_mutexes) {
+            mutex->Release(this);
+        }
+        held_mutexes.clear();
+
+        std::remove(core.thread_heap.begin(), core.thread_heap.end(), this);
+
+        // Mark the TLS slot in the thread's page as free.
+        u32 tls_page = (tls_address - Memory::TLS_AREA_VADDR) / Memory::PAGE_SIZE;
+        u32 tls_slot =
+            ((tls_address - Memory::TLS_AREA_VADDR) % Memory::PAGE_SIZE) / Memory::TLS_ENTRY_SIZE;
+        process->tls_slots[tls_page].reset(tls_slot);
+    }
+}
+
+bool Thread::IsWokenBy(const Kernel::WaitObject* object) {
+
+    if (status == Thread::Status::WaitSyncAny) {
+        return std::find(waiting_on.begin(), waiting_on.end(), object) != waiting_on.end();
+    } else if (status == Thread::Status::WaitSyncAll) {
+        return std::find_if(waiting_on.begin(), waiting_on.end(),
+                            [&](const Kernel::WaitObject* obj) {
+                                return obj == object || !obj->ShouldWait(this);
+                            }) == waiting_on.end();
+    } else {
+        return false;
+    }
+}
+
+void Thread::WakeFromWaiting(Kernel::WaitObject* object) {
+    if (status == Status::WaitSyncAll) {
+        for (auto obj : waiting_on) {
+            obj->Acquire(this);
+        }
+    } else if (status == Status::WaitSyncAny) {
+        auto it = std::find(waiting_on.begin(), waiting_on.end(), object);
+        auto idx = it - waiting_on.begin();
+        object->Acquire(this);
+        context->SetCpuRegister(1, static_cast<u32>(idx));
+    } else {
+        ASSERT(false);
+    }
+    context->SetCpuRegister(0, RESULT_SUCCESS.raw);
+
+    // Clear waiting objects/threads
+    for (auto obj : waiting_on) {
+        obj->RemoveWaitingThread(this);
+    }
+    waiting_on.clear();
+    status = Thread::Status::Ready;
+}
+
+void Thread::SetPriority(u32 priority) {
+    nominal_priority = priority;
+    for (auto obj : waiting_on) {
+        auto mutex = dynamic_cast<Kernel::Mutex*>(obj);
+        if (mutex && mutex->holding_thread) {
+            mutex->holding_thread->real_priority.reset();
         }
     }
 }
@@ -433,8 +468,35 @@ void Thread::WakeUp() {
         context->SetCpuRegister(0, RESULT_TIMEOUT.raw);
     case Status::WaitSleep:
         status = Thread::Status::Ready;
-        // TODO: Sort
     }
+}
+
+void Thread::OnAcquireMutex(Kernel::Mutex* mutex) {
+    for (auto waiting_thread : mutex->GetWaitingThreads()) {
+        waiting_thread->real_priority.reset();
+    }
+    held_mutexes.insert(mutex);
+}
+
+void Thread::OnReleaseMutex(Kernel::Mutex* mutex) {
+    held_mutexes.erase(mutex);
+    for (auto waiting_thread : mutex->GetWaitingThreads()) {
+        waiting_thread->real_priority.reset();
+    }
+}
+
+u32 Thread::GetPriority() {
+    if (!real_priority.has_value()) {
+        u32 priority = nominal_priority;
+        real_priority = priority;
+        for (auto mutex : held_mutexes) {
+            for (auto waiting_thread : mutex->GetWaitingThreads()) {
+                priority = std::min(priority, waiting_thread->GetPriority());
+            }
+        }
+        real_priority = priority;
+    }
+    return real_priority.value();
 }
 
 } // namespace Kernel

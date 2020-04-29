@@ -36,19 +36,21 @@ public:
      * Add a thread to wait on this object
      * @param thread Pointer to thread to add
      */
-    virtual void AddWaitingThread(std::shared_ptr<Thread> thread);
+    void AddWaitingThread(std::shared_ptr<Thread> thread);
 
     /**
      * Removes a thread from waiting on this object (e.g. if it was resumed already)
      * @param thread Pointer to thread to remove
      */
-    virtual void RemoveWaitingThread(Thread* thread);
+    void RemoveWaitingThread(Thread* thread);
 
-    /**
-     * Wake up all threads waiting on this object that can be awoken, in priority order,
-     * and set the synchronization result and output of the thread.
-     */
-    virtual void WakeupAllWaitingThreads();
+    // /**
+    //  * Wake up all threads waiting on this object that can be awoken, in priority order,
+    //  * and set the synchronization result and output of the thread.
+    //  */
+    // virtual void WakeupAllWaitingThreads();
+
+    bool AcquireOrWait(std::shared_ptr<Thread> thread);
 
     /// Obtains the highest priority thread that is ready to run from this object's waiting list.
     std::shared_ptr<Thread> GetHighestPriorityReadyThread() const;
@@ -59,7 +61,9 @@ public:
     /// Sets a callback which is called when the object becomes available
     void SetHLENotifier(std::function<void()> callback);
 
-private:
+protected:
+    void NotifyAvailable();
+
     /// Threads waiting for this object to become available
     std::vector<std::shared_ptr<Thread>> waiting_threads;
 

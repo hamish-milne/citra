@@ -1,6 +1,9 @@
 
 
 #include <vector>
+#include <boost/bimap.hpp>
+#include <boost/bimap/multiset_of.hpp>
+#include <boost/container/flat_set.hpp>
 #include <queue>
 #include "core/arm/arm_interface.h"
 #include "core/hle/kernel/process.h"
@@ -60,6 +63,18 @@ private:
 
 class Kernel::ThreadManager;
 class Kernel::Thread;
+
+using mutex_assoc = ;
+
+template <typename Iterator>
+Iterator begin(std::pair<Iterator, Iterator> pair) {
+    return pair.first;
+}
+
+template <typename Iterator>
+Iterator end(std::pair<Iterator, Iterator> pair) {
+    return pair.second;
+}
 
 namespace Core {
 
@@ -130,18 +145,20 @@ public:
                     VAddr tls_address);
     virtual ~Thread();
 
-    bool operator>(Thread& right) const {
+    bool operator>(Thread& right) {
         return Order() > right.Order();
     }
 
-    void WaitObjectReady(Kernel::WaitObject* object);
-    void SetPriority(u32 value) {
-        priority = value;
-    }
+    void WakeFromWaiting(Kernel::WaitObject* object);
+    void SetPriority(u32 value);
+    u32 GetPriority();
+
+    void OnAcquireMutex(Kernel::Mutex* mutex);
+    void OnReleaseMutex(Kernel::Mutex* mutex);
 
 private:
-    int Order() const {
-        return status * Priority::Max + priority;
+    int Order() {
+        return status * Priority::Max + GetPriority();
     }
 
     class WakeupEvent;
@@ -154,15 +171,15 @@ private:
     const VAddr tls_address;
 
     std::vector<Kernel::WaitObject*> waiting_on{};
+    boost::container::flat_set<Kernel::Mutex*> held_mutexes{};
     Status status = Status::Created;
-    u32 priority = Priority::Default;
-
-    // TODO: Nominal priority + priority boost
+    u32 nominal_priority = Priority::Default;
+    std::optional<u32> real_priority{};
 
     void WakeUp();
-
+    void Stop();
     void SetStatus(Status status);
-    std::optional<VAddr> AllocateTLS(KernelSystem& kernel);
+    bool IsWokenBy(const Kernel::WaitObject* object);
 
     friend class ThreadManager;
 };

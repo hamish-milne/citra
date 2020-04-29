@@ -36,22 +36,14 @@ public:
         return HANDLE_TYPE;
     }
 
-    int lock_count;   ///< Number of times the mutex has been acquired
-    u32 priority;     ///< The priority of the mutex, used for priority inheritance.
-    std::string name; ///< Name of mutex (optional)
+    int lock_count;                         ///< Number of times the mutex has been acquired
+    std::string name;                       ///< Name of mutex (optional)
     std::shared_ptr<Thread> holding_thread; ///< Thread that has acquired the mutex
 
-    /**
-     * Elevate the mutex priority to the best priority
-     * among the priorities of all its waiting threads.
-     */
-    void UpdatePriority();
+    // void AddWaitingThread(std::shared_ptr<Thread> thread) override;
+    // void RemoveWaitingThread(Thread* thread) override;
 
-    bool ShouldWait(const Thread* thread) const override;
-    void Acquire(Thread* thread) override;
-
-    void AddWaitingThread(std::shared_ptr<Thread> thread) override;
-    void RemoveWaitingThread(Thread* thread) override;
+    bool AcquireOrWait(std::shared_ptr<Thread> thread) override;
 
     /**
      * Attempts to release the mutex from the specified thread.
@@ -59,6 +51,10 @@ public:
      * @returns The result code of the operation.
      */
     ResultCode Release(Thread* thread);
+
+protected:
+    bool ShouldWait(const Thread* thread) const override;
+    void Acquire(Thread* thread) override;
 
 private:
     KernelSystem& kernel;
@@ -68,17 +64,10 @@ private:
     void serialize(Archive& ar, const unsigned int file_version) {
         ar& boost::serialization::base_object<WaitObject>(*this);
         ar& lock_count;
-        ar& priority;
         ar& name;
         ar& holding_thread;
     }
 };
-
-/**
- * Releases all the mutexes held by the specified thread
- * @param thread Thread that is holding the mutexes
- */
-void ReleaseThreadMutexes(Thread* thread);
 
 } // namespace Kernel
 
