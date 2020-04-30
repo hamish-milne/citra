@@ -22,8 +22,7 @@ struct PageTable;
 /// Generic ARM11 CPU interface
 class ARM_Interface : NonCopyable {
 public:
-    explicit ARM_Interface(u32 id, std::shared_ptr<Core::Timing::Timer> timer)
-        : timer(timer), id(id){};
+    explicit ARM_Interface(u32 id, std::shared_ptr<Core::Timing> timer) : timer(timer), id(id){};
     virtual ~ARM_Interface() {}
 
     class ThreadContext {
@@ -228,11 +227,11 @@ public:
 
     virtual void PurgeState() = 0;
 
-    Core::Timing::Timer& GetTimer() {
+    Core::Timing& GetTimer() {
         return *timer;
     }
 
-    const Core::Timing::Timer& GetTimer() const {
+    const Core::Timing& GetTimer() const {
         return *timer;
     }
 
@@ -244,7 +243,7 @@ protected:
     // This us used for serialization. Returning nullptr is valid if page tables are not used.
     virtual std::shared_ptr<Memory::PageTable> GetPageTable() const = 0;
 
-    std::shared_ptr<Core::Timing::Timer> timer;
+    std::shared_ptr<Core::Timing> timer;
 
 private:
     u32 id;

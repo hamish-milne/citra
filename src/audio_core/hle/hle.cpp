@@ -77,7 +77,6 @@ private:
 
     StereoFrame16 GenerateCurrentFrame();
     bool Tick();
-    void AudioTickCallback(s64 cycles_late);
 
     DspState dsp_state = DspState::Off;
     std::array<std::vector<u8>, num_dsp_pipe> pipe_data{};
@@ -93,7 +92,29 @@ private:
     HLE::Mixers mixers{};
 
     DspHle& parent;
-    Core::TimingEventType* tick_event{};
+
+    class AudioTickCallback : public Core::Event {
+        Impl& parent;
+
+    public:
+        AudioTickCallback(Impl& parent_) : parent(parent_) {}
+
+        void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {
+            if (parent.Tick()) {
+                // TODO(merry): Signal all the other interrupts as appropriate.
+                if (auto service = parent.dsp_dsp.lock()) {
+                    service->SignalInterrupt(InterruptType::Pipe, DspPipe::Audio);
+                    // HACK(merry): Added to prevent regressions. Will remove soon.
+                    service->SignalInterrupt(InterruptType::Pipe, DspPipe::Binary);
+                }
+            }
+
+            // Reschedule recurrent event
+            timing.ScheduleEvent(this, Ticks(audio_frame_ticks) - cycles_late);
+        }
+    };
+
+    std::unique_ptr<AudioTickCallback> tick_event{new AudoTickCallback(*this)};
 
     std::unique_ptr<HLE::DecoderBase> decoder{};
 
@@ -144,16 +165,12 @@ DspHle::Impl::Impl(DspHle& parent_, Memory::MemorySystem& memory) : parent(paren
     }
 
     Core::Timing& timing = Core::System::GetInstance().CoreTiming();
-    tick_event =
-        timing.RegisterEvent("AudioCore::DspHle::tick_event", [this](u64, s64 cycles_late) {
-            this->AudioTickCallback(cycles_late);
-        });
-    timing.ScheduleEvent(audio_frame_ticks, tick_event);
+    timing.ScheduleEvent(tick_event.get(), Ticks(audio_frame_ticks));
 }
 
 DspHle::Impl::~Impl() {
     Core::Timing& timing = Core::System::GetInstance().CoreTiming();
-    timing.UnscheduleEvent(tick_event, 0);
+    timing.UnscheduleEvent(tick_event.get(), 0);
 }
 
 DspState DspHle::Impl::GetDspState() const {
@@ -434,21 +451,6 @@ bool DspHle::Impl::Tick() {
     parent.OutputFrame(std::move(current_frame));
 
     return true;
-}
-
-void DspHle::Impl::AudioTickCallback(s64 cycles_late) {
-    if (Tick()) {
-        // TODO(merry): Signal all the other interrupts as appropriate.
-        if (auto service = dsp_dsp.lock()) {
-            service->SignalInterrupt(InterruptType::Pipe, DspPipe::Audio);
-            // HACK(merry): Added to prevent regressions. Will remove soon.
-            service->SignalInterrupt(InterruptType::Pipe, DspPipe::Binary);
-        }
-    }
-
-    // Reschedule recurrent event
-    Core::Timing& timing = Core::System::GetInstance().CoreTiming();
-    timing.ScheduleEvent(audio_frame_ticks - cycles_late, tick_event);
 }
 
 DspHle::DspHle(Memory::MemorySystem& memory) : impl(std::make_unique<Impl>(*this, memory)) {}

@@ -121,10 +121,7 @@ static u8 PipeIndexToSlotIndex(u8 pipe_index, PipeDirection direction) {
 }
 
 struct DspLle::Impl final {
-    Impl(bool multithread) : multithread(multithread) {
-        teakra_slice_event = Core::System::GetInstance().CoreTiming().RegisterEvent(
-            "DSP slice", [this](u64, int late) { TeakraSliceEvent(static_cast<u64>(late)); });
-    }
+    Impl(bool multithread) : multithread(multithread) {}
 
     ~Impl() {
         StopTeakraThread();
@@ -136,7 +133,6 @@ struct DspLle::Impl final {
     bool semaphore_signaled = false;
     bool data_signaled = false;
 
-    Core::TimingEventType* teakra_slice_event;
     std::atomic<bool> loaded = false;
 
     const bool multithread;
@@ -146,7 +142,7 @@ struct DspLle::Impl final {
     std::size_t stop_generation;
 
     static constexpr u32 DspDataOffset = 0x40000;
-    static constexpr u32 TeakraSlice = 20000;
+    static const u32 TeakraSlice = 20000;
 
     void TeakraThread() {
         while (true) {
@@ -177,15 +173,26 @@ struct DspLle::Impl final {
         }
     }
 
-    void TeakraSliceEvent(u64 late) {
-        RunTeakraSlice();
-        u64 next = TeakraSlice * 2; // DSP runs at clock rate half of the CPU rate
-        if (next < late)
-            next = 0;
-        else
-            next -= late;
-        Core::System::GetInstance().CoreTiming().ScheduleEvent(next, teakra_slice_event, 0);
-    }
+    class TeakraSliceEvent : public Core::Event {
+        Impl& parent;
+
+    public:
+        TeakraSliceEvent(Impl& parent_) : parent(parent_) {}
+        const std::string& Name() override {
+            return "DSP slice";
+        }
+        void Execute(Core::Timing& timing, u64 userdata, Ticks late) {
+            parent.RunTeakraSlice();
+            auto next = Ticks(TeakraSlice * 2); // DSP runs at clock rate half of the CPU rate
+            if (next < late)
+                next = Ticks(0);
+            else
+                next = next - late;
+            timing.ScheduleEvent(this, next);
+        }
+    };
+
+    std::unique_ptr<TeakraSliceEvent> teakra_slice_event{new TeakraSliceEvent(*this)};
 
     u8* GetDspDataPointer(u32 baddr) {
         auto& memory = teakra.GetDspMemory();

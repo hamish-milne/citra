@@ -219,7 +219,7 @@ public:
     public:
         virtual ~WakeupCallback() = default;
         virtual void WakeUp(std::shared_ptr<Thread> thread, HLERequestContext& context,
-                            ThreadWakeupReason reason) = 0;
+                            Thread::WakeupReason reason) = 0;
 
     private:
         template <class Archive>
