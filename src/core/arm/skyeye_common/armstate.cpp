@@ -11,8 +11,8 @@
 #include "core/memory.h"
 
 ARMul_State::ARMul_State(Core::System* system, Memory::MemorySystem& memory,
-                         PrivilegeMode initial_mode)
-    : system(system), memory(memory) {
+                         PrivilegeMode initial_mode, Core::Timing& timer)
+    : system(system), memory(memory), timer(timer) {
     Reset();
     ChangePrivilegeMode(initial_mode);
 }
@@ -607,8 +607,8 @@ void ARMul_State::ServeBreak() {
     }
 
     DEBUG_ASSERT(system != nullptr);
-    Kernel::Thread* thread = system->Kernel().GetCurrentThreadManager().GetCurrentThread();
-    system->GetRunningCore().SaveContext(thread->context);
+    auto thread = system->Kernel().GetCurrentThreadManager().GetCurrentThread();
+    thread->SaveContext();
 
     if (last_bkpt_hit || GDBStub::IsMemoryBreak() || GDBStub::GetCpuStepFlag()) {
         last_bkpt_hit = false;

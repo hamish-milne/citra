@@ -28,7 +28,7 @@ ObjectInfo GetObjectInfo(const Kernel::Thread* thread) {
     if (thread == nullptr) {
         return {};
     }
-    return {thread->GetTypeName(), thread->GetName(), static_cast<int>(thread->GetThreadId())};
+    return {thread->GetTypeName(), thread->GetName(), static_cast<int>(thread->GetObjectId())};
 }
 
 ObjectInfo GetObjectInfo(const Kernel::Process* process) {
@@ -48,7 +48,7 @@ bool Recorder::IsEnabled() const {
 
 void Recorder::RegisterRequest(const std::shared_ptr<Kernel::ClientSession>& client_session,
                                const std::shared_ptr<Kernel::Thread>& client_thread) {
-    const u32 thread_id = client_thread->GetThreadId();
+    const u32 thread_id = client_thread->GetObjectId();
 
     RequestRecord record = {/* id */ ++record_count,
                             /* status */ RequestStatus::Sent,
@@ -69,7 +69,7 @@ void Recorder::SetRequestInfo(const std::shared_ptr<Kernel::Thread>& client_thre
                               std::vector<u32> untranslated_cmdbuf,
                               std::vector<u32> translated_cmdbuf,
                               const std::shared_ptr<Kernel::Thread>& server_thread) {
-    const u32 thread_id = client_thread->GetThreadId();
+    const u32 thread_id = client_thread->GetObjectId();
     if (!record_map.count(thread_id)) {
         // This is possible when the recorder is enabled after application started
         LOG_ERROR(Kernel, "No request is assoicated with the thread");
@@ -82,7 +82,7 @@ void Recorder::SetRequestInfo(const std::shared_ptr<Kernel::Thread>& client_thre
     record.translated_request_cmdbuf = std::move(translated_cmdbuf);
 
     if (server_thread) {
-        record.server_process = GetObjectInfo(server_thread->owner_process.get());
+        record.server_process = GetObjectInfo(&server_thread->Process());
         record.server_thread = GetObjectInfo(server_thread.get());
     } else {
         record.is_hle = true;
@@ -106,7 +106,7 @@ void Recorder::SetRequestInfo(const std::shared_ptr<Kernel::Thread>& client_thre
 void Recorder::SetReplyInfo(const std::shared_ptr<Kernel::Thread>& client_thread,
                             std::vector<u32> untranslated_cmdbuf,
                             std::vector<u32> translated_cmdbuf) {
-    const u32 thread_id = client_thread->GetThreadId();
+    const u32 thread_id = client_thread->GetObjectId();
     if (!record_map.count(thread_id)) {
         // This is possible when the recorder is enabled after application started
         LOG_ERROR(Kernel, "No request is assoicated with the thread");
@@ -126,7 +126,7 @@ void Recorder::SetReplyInfo(const std::shared_ptr<Kernel::Thread>& client_thread
 }
 
 void Recorder::SetHLEUnimplemented(const std::shared_ptr<Kernel::Thread>& client_thread) {
-    const u32 thread_id = client_thread->GetThreadId();
+    const u32 thread_id = client_thread->GetObjectId();
     if (!record_map.count(thread_id)) {
         // This is possible when the recorder is enabled after application started
         LOG_ERROR(Kernel, "No request is assoicated with the thread");

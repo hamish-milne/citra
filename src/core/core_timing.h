@@ -21,7 +21,6 @@
 #include <vector>
 #include <boost/container/flat_set.hpp>
 #include "common/common_types.h"
-#include "core/arm/arm_interface.h"
 #include "core/hle/kernel/process.h"
 #include "core/hle/kernel/wait_object.h"
 
@@ -32,7 +31,7 @@
 // #include <unordered_map>
 // #include <vector>
 // #include <boost/serialization/split_member.hpp>
-// #include <boost/serialization/vector.hpp>
+#include <boost/serialization/vector.hpp>
 // #include "common/common_types.h"
 // #include "common/logging/log.h"
 // #include "common/threadsafe_queue.h"
@@ -136,8 +135,11 @@ constexpr u64 MAX_VALUE_TO_MULTIPLY = std::numeric_limits<s64>::max() / BASE_CLO
 
 struct Ticks {
     constexpr explicit Ticks(s64 _count) : count(_count) {}
-    constexpr explicit operator s64() {
+    constexpr explicit operator s64() const {
         return count;
+    }
+    constexpr operator nanoseconds() const {
+        return nanoseconds(count * std::nano::den / BASE_CLOCK_RATE_ARM11);
     }
     constexpr Ticks(nanoseconds ns) : count(ns.count() * BASE_CLOCK_RATE_ARM11 / std::nano::den) {
         if (ns.count() > MAX_VALUE_TO_MULTIPLY) {
@@ -167,7 +169,7 @@ private:
 
 struct Cycles {
     constexpr explicit Cycles(s64 _count) : count(_count) {}
-    constexpr explicit operator s64() {
+    constexpr explicit operator s64() const {
         return count;
     }
     constexpr Cycles(Ticks ticks, float scale_factor)
@@ -190,20 +192,29 @@ private:
     s64 count;
 };
 
+class ARM_Interface;
+
 namespace Core {
 
 class Event {
 public:
-    virtual const std::string& Name() = 0;
+    virtual const std::string& Name() const = 0;
     virtual void Execute(Timing& timing, u64 userdata, Ticks cycles_late) = 0;
 };
 
 class Timing {
 
 public:
-    Timing(u32 core_count, std::function<ARM_Interface*()> constructor);
+    Timing(u32 core_count, std::function<ARM_Interface*(Timing& timing)> constructor);
+    ~Timing();
 
     Kernel::ThreadManager& GetCore(int core_id) const;
+    u32 CoreCount() {
+        return static_cast<u32>(cores.size());
+    }
+    Kernel::ThreadManager& CurrentCore() const {
+        return GetCore(current_core_id);
+    }
     void ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userdata = 0);
     void UnscheduleEvent(Event* event, u64 userdata = 0);
     void RunSlice();
@@ -212,6 +223,10 @@ public:
     Ticks Time_UB() const {
         return std::max(Time_Current(), max_core_time);
     }
+
+    // NOTE: Needed for CPU
+    void AddTicks(s64 ticks);
+    s64 GetDowncount() const;
 
 private:
     struct EventInstance {
@@ -242,6 +257,12 @@ private:
     Ticks max_core_time{0};
 
     friend class Kernel::ThreadManager;
+
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned int file_version) {
+        // TODO:
+    }
+    friend class boost::serialization::access;
 };
 
 // using TimedCallback = std::function<void(u64 userdata, int cycles_late)>;

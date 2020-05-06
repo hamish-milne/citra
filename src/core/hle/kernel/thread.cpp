@@ -3,28 +3,31 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
-#include <list>
-#include <unordered_map>
-#include <vector>
-#include <boost/serialization/string.hpp>
+// #include <list>
+// #include <unordered_map>
+// #include <vector>
+// #include <boost/serialization/string.hpp>
 #include "common/archives.h"
-#include "common/assert.h"
-#include "common/common_types.h"
-#include "common/logging/log.h"
-#include "common/math_util.h"
-#include "common/serialization/boost_flat_set.h"
-#include "core/arm/arm_interface.h"
-#include "core/arm/skyeye_common/armstate.h"
-#include "core/core.h"
+// #include "common/assert.h"
+// #include "common/common_types.h"
+// #include "common/logging/log.h"
+// #include "common/math_util.h"
+// #include "common/serialization/boost_flat_set.h"
+// #include "core/arm/arm_interface.h"
+// #include "core/arm/skyeye_common/armstate.h"
+// #include "core/core.h"
 #include "core/hle/kernel/errors.h"
-#include "core/hle/kernel/handle_table.h"
-#include "core/hle/kernel/kernel.h"
-#include "core/hle/kernel/memory.h"
+// #include "core/hle/kernel/handle_table.h"
+// #include "core/hle/kernel/kernel.h"
+// #include "core/hle/kernel/memory.h"
 #include "core/hle/kernel/mutex.h"
-#include "core/hle/kernel/process.h"
+// #include "core/hle/kernel/process.h"
 #include "core/hle/kernel/thread.h"
 #include "core/hle/result.h"
-#include "core/memory.h"
+// #include "core/memory.h"
+#include "core/hle/kernel/address_arbiter.h"
+#include "core/hle/kernel/event.h"
+#include "core/hle/kernel/hle_ipc.h"
 
 SERIALIZE_EXPORT_IMPL(Kernel::Thread)
 
@@ -116,11 +119,11 @@ class Thread::WakeupEvent : public Core::Event {
 public:
     explicit WakeupEvent(Thread& parent_) : parent(parent_) {}
 
-    const std::string& Name() override {
+    const std::string& Name() const override {
         return "Thread wakeup";
     }
 
-    void Execute(u64 userdata, Ticks cycles_late) {
+    void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {
         parent.WakeUp();
     }
 };
@@ -200,9 +203,9 @@ bool ThreadManager::Reschedule() {
 
 bool ThreadManager::AllThreadsIdle() const {
     // TODO: Also check WaitObjects?
-    return std::find_if(threads.begin(), threads.end(), [](const Kernel::Thread* thread) {
-        return thread->status <= Thread::Status::Ready;
-    });
+    return std::find_if(threads.begin(), threads.end(), [](const auto thread) {
+               return thread->status <= Thread::Status::Ready;
+           }) == threads.end();
 }
 
 void ThreadManager::EndBlock() {
@@ -272,6 +275,31 @@ ResultCode ThreadManager::WaitAny(std::vector<Kernel::WaitObject*> objects,
     return RESULT_SUCCESS;
 }
 
+ResultCode ThreadManager::WaitIPC(std::vector<Kernel::WaitObject*> objects) {
+    ASSERT(thread->status == Thread::Status::Running);
+
+    // Check if we can sync immediately
+    auto active_obj =
+        std::find_if(objects.begin(), objects.end(),
+                     [this](const Kernel::WaitObject* obj) { return !obj->ShouldWait(thread); });
+    if (active_obj != objects.end()) {
+        (*active_obj)->Acquire(thread);
+
+        if ((*active_obj)->GetHandleType() != HandleType::ServerSession)
+            return RESULT_SUCCESS;
+        auto server_session = static_cast<ServerSession*>(*active_obj);
+        return server_session->ReceiveIPCRequest(thread);
+    }
+
+    thread->waiting_on = objects;
+    for (auto obj : objects) {
+        obj->AddWaitingThread(Kernel::SharedFrom(thread));
+    }
+    thread->status = Thread::Status::WaitIPC;
+    Reschedule();
+    return RESULT_SUCCESS;
+}
+
 ResultCode ThreadManager::WaitAll(std::vector<Kernel::WaitObject*> objects,
                                   std::chrono::nanoseconds timeout) {
     ASSERT(thread->status == Thread::Status::Running);
@@ -309,6 +337,37 @@ ResultCode ThreadManager::WaitAll(std::vector<Kernel::WaitObject*> objects,
     thread->status = Thread::Status::WaitSyncAll;
     Reschedule();
     return RESULT_SUCCESS;
+}
+
+void ThreadManager::WaitArb(AddressArbiter* arbiter, VAddr address,
+                            std::optional<nanoseconds> timeout) {
+    ASSERT(thread->status == Thread::Status::Running);
+    thread->status = Thread::Status::WaitArb;
+    thread->arbiter = SharedFrom(arbiter);
+    thread->wait_address = address;
+    if (timeout.has_value()) {
+        root.ScheduleEvent(thread->wakeup_event.get(), timeout.value());
+    }
+    Reschedule();
+}
+
+bool Thread::IsWaitingOn(VAddr address) const {
+
+    ASSERT_MSG(status == Thread::Status::WaitArb, "Inconsistent AddressArbiter state");
+    return wait_address == address;
+}
+
+void Thread::WaitHleEvent(HLERequestContext* context, std::shared_ptr<Kernel::Event> hle_event,
+                          nanoseconds timeout, std::shared_ptr<IPCCallback> callback) {
+    ASSERT(status == Thread::Status::Running);
+    status = Thread::Status::WaitSyncAny;
+    hle_event->AddWaitingThread(Kernel::SharedFrom(this));
+    waiting_on = {hle_event.get()};
+    hle_context = context->shared_from_this();
+    hle_callback = callback;
+    if (timeout.count() > 0) {
+        core.root.ScheduleEvent(wakeup_event.get(), timeout);
+    }
 }
 
 void ThreadManager::Sleep() {
@@ -372,15 +431,29 @@ void Thread::ResumeFromWait(Kernel::WaitObject* object) {
         for (auto obj : waiting_on) {
             obj->Acquire(this);
         }
-    } else if (status == Status::WaitSyncAny) {
+        context->SetCpuRegister(0, RESULT_SUCCESS.raw);
+    } else if (status == Status::WaitSyncAny || status == Status::WaitIPC) {
         auto it = std::find(waiting_on.begin(), waiting_on.end(), object);
         auto idx = it - waiting_on.begin();
         object->Acquire(this);
+
+        if (status == Status::WaitIPC && object->GetHandleType() == HandleType::ServerSession) {
+            auto server_session = static_cast<ServerSession*>(object);
+            auto result = server_session->ReceiveIPCRequest(thread);
+            context->SetCpuRegister(0, result.raw);
+        } else {
+            context->SetCpuRegister(0, RESULT_SUCCESS.raw);
+        }
+
         context->SetCpuRegister(1, static_cast<u32>(idx));
+        if (hle_context) {
+            hle_context->OnWakeUp(this, WakeupReason::Signal, hle_callback);
+            hle_context = nullptr;
+            hle_callback = nullptr;
+        }
     } else {
-        ASSERT(false);
+        ASSERT_MSG(false, "Inconsistent thread status");
     }
-    context->SetCpuRegister(0, RESULT_SUCCESS.raw);
 
     // Clear waiting objects/threads
     for (auto obj : waiting_on) {
@@ -408,7 +481,18 @@ void Thread::WakeUp() {
     case Status::WaitSyncAll:
         context->SetCpuRegister(0, RESULT_TIMEOUT.raw);
     case Status::WaitSleep:
+        waiting_on.clear();
         status = Thread::Status::Ready;
+        if (hle_context) {
+            hle_context->OnWakeUp(this, WakeupReason::Timeout, hle_callback);
+            hle_context = nullptr;
+            hle_callback = nullptr;
+        }
+        break;
+    case Status::WaitArb:
+        status = Thread::Status::Ready;
+        arbiter->RemoveWaitingThread(this);
+        break;
     }
 }
 
@@ -841,21 +925,20 @@ u32 Thread::GetPriority() {
 //     current_priority = priority;
 // }
 
-// std::shared_ptr<Thread> SetupMainThread(KernelSystem& kernel, u32 entry_point, u32 priority,
-//                                         std::shared_ptr<Process> owner_process) {
-//     // Initialize new "main" thread
-//     auto thread_res =
-//         kernel.CreateThread("main", entry_point, priority, 0, owner_process->ideal_processor,
-//                             Memory::HEAP_VADDR_END, owner_process);
+std::shared_ptr<Thread> SetupMainThread(KernelSystem& kernel, u32 entry_point, u32 priority,
+                                        std::shared_ptr<Process> owner_process) {
+    // Initialize new "main" thread
+    auto thread_res =
+        kernel.CreateThread("main", entry_point, priority, 0, owner_process->ideal_processor,
+                            Memory::HEAP_VADDR_END, owner_process);
 
-//     std::shared_ptr<Thread> thread = std::move(thread_res).Unwrap();
+    std::shared_ptr<Thread> thread = std::move(thread_res).Unwrap();
 
-//     thread->context->SetFpscr(FPSCR_DEFAULT_NAN | FPSCR_FLUSH_TO_ZERO | FPSCR_ROUND_TOZERO |
-//                               FPSCR_IXC); // 0x03C00010
+    thread->SetMainThread();
 
-//     // Note: The newly created thread will be run when the scheduler fires.
-//     return thread;
-// }
+    // Note: The newly created thread will be run when the scheduler fires.
+    return thread;
+}
 
 // bool ThreadManager::HaveReadyThreads() {
 //     return ready_queue.get_first() != nullptr;

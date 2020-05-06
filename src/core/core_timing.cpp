@@ -3,21 +3,44 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
-#include <queue>
+#include <vector>
 // #include <cinttypes>
 // #include <tuple>
 // #include "common/assert.h"
 // #include "common/logging/log.h"
 #include "core/core_timing.h"
+#include "core/hle/kernel/thread.h"
 
 namespace Core {
 
 template <class T>
-class min_queue : public std::priority_queue<T, std::vector<T>, std::greater<T>> {
+class min_queue {
+    std::vector<T> c;
+    std::greater<T> comp;
+
 public:
+    template <class... _Valty>
+    void emplace(_Valty&&... _Val) {
+        c.emplace_back(std::forward<_Valty>(_Val)...);
+        std::push_heap(c.begin(), c.end(), comp);
+    }
+
+    const T& top() const {
+        return c.front();
+    }
+
+    void pop() {
+        std::pop_heap(c.begin(), c.end(), comp);
+        c.pop_back();
+    }
+
+    bool empty() const {
+        return c.empty();
+    }
+
     template <class Pr>
     bool remove(Pr pred) {
-        auto it = std::remove_if(c.begin(), c.end(), pr);
+        auto it = std::remove_if(c.begin(), c.end(), pred);
         if (it != c.end()) {
             c.erase(it, c.end());
             std::make_heap(c.begin(), c.end(), comp);
@@ -29,12 +52,14 @@ public:
 
 class Timing::EventQueue : public min_queue<Timing::EventInstance> {};
 
-Timing::Timing(u32 core_count, std::function<ARM_Interface*()> constructor)
+Timing::Timing(u32 core_count, std::function<ARM_Interface*(Timing& timing)> constructor)
     : events(new EventQueue) {
     for (u32 i = 0; i < core_count; i++) {
-        cores.emplace_back(i, std::unique_ptr<ARM_Interface>(constructor()));
+        cores.emplace_back(i, std::unique_ptr<ARM_Interface>(constructor(*this)));
     }
 }
+
+Timing::~Timing() = default;
 
 void Timing::RunSlice() {
     // We assume:
@@ -45,7 +70,8 @@ void Timing::RunSlice() {
     // Run events scheduled for 'now'. Threshold chosen to reduce small slices.
     while (TimeToNextEvent() < Ticks(100)) {
         auto next_event = events->top();
-        next_event.event_type->Execute(next_event.userdata, Time_Current() - next_event.time);
+        next_event.event_type->Execute(*this, next_event.userdata,
+                                       Time_Current() - next_event.time);
         events->pop();
     }
     // the max slice time is fairly arbitrary, as it represents the largest duration by which cores
@@ -73,9 +99,18 @@ void Timing::RunSlice() {
     }
 }
 
+void Timing::AddTicks(s64 ticks) {
+    cores[current_core_id].cycles_remaining =
+        cores[current_core_id].cycles_remaining - Cycles(ticks);
+}
+
+s64 Timing::GetDowncount() const {
+    return s64(cores[current_core_id].cycles_remaining);
+}
+
 Ticks Timing::TimeToNextEvent() const {
     if (events->empty()) {
-        return Ticks(std::numeric_limits<s64>::max);
+        return Ticks(std::numeric_limits<s64>::max());
     }
     return events->top().time - Time_LB();
 }
@@ -85,7 +120,7 @@ void Timing::ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userdata)
 
     if ((Time_Current() + cycles_into_future) < Time_UB()) {
         LOG_WARNING(Core, "Event {} was scheduled {} cycles too soon for all cores to respond",
-                    event->Name(), Time_UB() - (Time_Current() + cycles_into_future));
+                    event->Name(), s64(Time_UB() - (Time_Current() + cycles_into_future)));
     }
 
     // Try to continue the current execution:
@@ -94,7 +129,7 @@ void Timing::ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userdata)
         // If we're idle, try executing the event now to see if it'll wake us up
         if (core.AllThreadsIdle()) {
             core.AddCycles(Cycles(cycles_into_future, 1.0));
-            event->Execute(userdata, Ticks(0));
+            event->Execute(*this, userdata, Ticks(0));
             core.Reschedule();
             return;
         }

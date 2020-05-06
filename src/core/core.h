@@ -149,10 +149,7 @@ public:
      * @returns True if the emulated system is powered on, otherwise false.
      */
     bool IsPoweredOn() const {
-        return cpu_cores.size() > 0 &&
-               std::all_of(cpu_cores.begin(), cpu_cores.end(),
-                           [](std::shared_ptr<ARM_Interface> ptr) { return ptr != nullptr; });
-        ;
+        return timing != nullptr;
     }
 
     /**
@@ -164,7 +161,7 @@ public:
     }
 
     /// Prepare the core emulation for a reschedule
-    void PrepareReschedule();
+    // void PrepareReschedule();
 
     PerfStats::Results GetAndResetPerfStats();
 
@@ -174,7 +171,7 @@ public:
      */
 
     ARM_Interface& GetRunningCore() {
-        return *running_core;
+        return timing->CurrentCore().CPU();
     };
 
     /**
@@ -184,16 +181,16 @@ public:
      */
 
     ARM_Interface& GetCore(u32 core_id) {
-        return *cpu_cores[core_id];
+        return timing->GetCore(core_id).CPU();
     };
 
     u32 GetNumCores() const {
-        return static_cast<u32>(cpu_cores.size());
+        return timing->CoreCount();
     }
 
     void InvalidateCacheRange(u32 start_address, std::size_t length) {
-        for (const auto& cpu : cpu_cores) {
-            cpu->InvalidateCacheRange(start_address, length);
+        for (u32 i = 0; i < timing->CoreCount(); i++) {
+            timing->GetCore(i).CPU().InvalidateCacheRange(start_address, length);
         }
     }
 
@@ -320,13 +317,13 @@ private:
                       u32 num_cores);
 
     /// Reschedule the core emulation
-    void Reschedule();
+    // void Reschedule();
 
     /// AppLoader used to load the current executing application
     std::unique_ptr<Loader::AppLoader> app_loader;
 
     /// ARM11 CPU core
-    std::vector<std::shared_ptr<ARM_Interface>> cpu_cores;
+    // std::vector<std::shared_ptr<ARM_Interface>> cpu_cores;
     ARM_Interface* running_core = nullptr;
 
     /// DSP core

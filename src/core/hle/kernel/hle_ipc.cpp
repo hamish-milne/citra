@@ -16,46 +16,25 @@
 
 namespace Kernel {
 
-class HLERequestContext::ThreadCallback : public Kernel::WakeupCallback {
-
-public:
-    ThreadCallback(std::shared_ptr<HLERequestContext> context_,
-                   std::shared_ptr<HLERequestContext::WakeupCallback> callback_)
-        : context(std::move(context_)), callback(std::move(callback_)) {}
-    void WakeUp(ThreadWakeupReason reason, std::shared_ptr<Thread> thread,
-                std::shared_ptr<WaitObject> object) {
-        ASSERT(thread->status == ThreadStatus::WaitHleEvent);
-        if (callback) {
-            callback->WakeUp(thread, *context, reason);
-        }
-
-        auto& process = thread->owner_process;
-        // We must copy the entire command buffer *plus* the entire static buffers area, since
-        // the translation might need to read from it in order to retrieve the StaticBuffer
-        // target addresses.
-        std::array<u32_le, IPC::COMMAND_BUFFER_LENGTH + 2 * IPC::MAX_STATIC_BUFFERS> cmd_buff;
-        Memory::MemorySystem& memory = context->kernel.memory;
-        memory.ReadBlock(*process, thread->GetCommandBufferAddress(), cmd_buff.data(),
-                         cmd_buff.size() * sizeof(u32));
-        context->WriteToOutgoingCommandBuffer(cmd_buff.data(), *process);
-        // Copy the translated command buffer back into the thread's command buffer area.
-        memory.WriteBlock(*process, thread->GetCommandBufferAddress(), cmd_buff.data(),
-                          cmd_buff.size() * sizeof(u32));
+void HLERequestContext::OnWakeUp(Thread* thread, Thread::WakeupReason reason,
+                                 std::shared_ptr<IPCCallback> callback) {
+    if (callback) {
+        callback->Continue(*thread, *this, reason);
     }
 
-private:
-    ThreadCallback() = default;
-    std::shared_ptr<HLERequestContext::WakeupCallback> callback{};
-    std::shared_ptr<HLERequestContext> context{};
-
-    template <class Archive>
-    void serialize(Archive& ar, const unsigned int) {
-        ar& boost::serialization::base_object<Kernel::WakeupCallback>(*this);
-        ar& callback;
-        ar& context;
-    }
-    friend class boost::serialization::access;
-};
+    auto& process = thread->Process();
+    // We must copy the entire command buffer *plus* the entire static buffers area, since
+    // the translation might need to read from it in order to retrieve the StaticBuffer
+    // target addresses.
+    std::array<u32_le, IPC::COMMAND_BUFFER_LENGTH + 2 * IPC::MAX_STATIC_BUFFERS> cmd_buff;
+    Memory::MemorySystem& memory = kernel.memory;
+    memory.ReadBlock(process, thread->GetCommandBufferAddress(), cmd_buff.data(),
+                     cmd_buff.size() * sizeof(u32));
+    WriteToOutgoingCommandBuffer(cmd_buff.data(), process);
+    // Copy the translated command buffer back into the thread's command buffer area.
+    memory.WriteBlock(process, thread->GetCommandBufferAddress(), cmd_buff.data(),
+                      cmd_buff.size() * sizeof(u32));
+}
 
 SessionRequestHandler::SessionInfo::SessionInfo(std::shared_ptr<ServerSession> session,
                                                 std::unique_ptr<SessionDataBase> data)
@@ -74,20 +53,12 @@ void SessionRequestHandler::ClientDisconnected(std::shared_ptr<ServerSession> se
         connected_sessions.end());
 }
 
-std::shared_ptr<Event> HLERequestContext::SleepClientThread(
-    const std::string& reason, std::chrono::nanoseconds timeout,
-    std::shared_ptr<WakeupCallback> callback) {
+std::shared_ptr<Event> HLERequestContext::SleepClientThread(const std::string& reason,
+                                                            std::chrono::nanoseconds timeout,
+                                                            std::shared_ptr<IPCCallback> callback) {
     // Put the client thread to sleep until the wait event is signaled or the timeout expires.
-    thread->wakeup_callback = std::make_shared<ThreadCallback>(shared_from_this(), callback);
-
     auto event = kernel.CreateEvent(Kernel::ResetType::OneShot, "HLE Pause Event: " + reason);
-    thread->status = ThreadStatus::WaitHleEvent;
-    thread->wait_objects = {event};
-    event->AddWaitingThread(thread);
-
-    if (timeout.count() > 0)
-        thread->WakeAfterDelay(timeout.count());
-
+    thread->WaitHleEvent(this, event, timeout, callback);
     return event;
 }
 

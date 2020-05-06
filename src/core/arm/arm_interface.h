@@ -19,10 +19,14 @@ namespace Memory {
 struct PageTable;
 };
 
+namespace Core {
+class Timing;
+}
+
 /// Generic ARM11 CPU interface
 class ARM_Interface : NonCopyable {
 public:
-    explicit ARM_Interface(u32 id, std::shared_ptr<Core::Timing> timer) : timer(timer), id(id){};
+    explicit ARM_Interface(Core::Timing& timer) : timer(timer){};
     virtual ~ARM_Interface() {}
 
     class ThreadContext {
@@ -227,33 +231,25 @@ public:
 
     virtual void PurgeState() = 0;
 
-    Core::Timing& GetTimer() {
-        return *timer;
-    }
-
-    const Core::Timing& GetTimer() const {
-        return *timer;
-    }
-
-    u32 GetID() const {
-        return id;
-    }
+    // u32 GetID() const {
+    //     return id;
+    // }
 
 protected:
     // This us used for serialization. Returning nullptr is valid if page tables are not used.
     virtual std::shared_ptr<Memory::PageTable> GetPageTable() const = 0;
 
-    std::shared_ptr<Core::Timing> timer;
+    Core::Timing& timer;
 
 private:
-    u32 id;
+    // u32 id;
 
     friend class boost::serialization::access;
 
     template <class Archive>
     void save(Archive& ar, const unsigned int file_version) const {
         ar << timer;
-        ar << id;
+        // ar << id;
         const auto page_table = GetPageTable();
         ar << page_table;
         for (int i = 0; i < 15; i++) {
@@ -295,7 +291,7 @@ private:
     void load(Archive& ar, const unsigned int file_version) {
         PurgeState();
         ar >> timer;
-        ar >> id;
+        // ar >> id;
         std::shared_ptr<Memory::PageTable> page_table{};
         ar >> page_table;
         SetPageTable(page_table);

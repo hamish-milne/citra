@@ -99,6 +99,11 @@ private:
     public:
         AudioTickCallback(Impl& parent_) : parent(parent_) {}
 
+        const std::string& Name() const override {
+            static auto str = "AudioCore::DspHle::tick_event";
+            return str;
+        }
+
         void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {
             if (parent.Tick()) {
                 // TODO(merry): Signal all the other interrupts as appropriate.
@@ -114,7 +119,7 @@ private:
         }
     };
 
-    std::unique_ptr<AudioTickCallback> tick_event{new AudoTickCallback(*this)};
+    std::unique_ptr<AudioTickCallback> tick_event{new AudioTickCallback(*this)};
 
     std::unique_ptr<HLE::DecoderBase> decoder{};
 

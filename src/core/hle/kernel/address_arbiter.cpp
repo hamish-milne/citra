@@ -20,23 +20,20 @@ SERIALIZE_EXPORT_IMPL(Kernel::AddressArbiter)
 
 namespace Kernel {
 
-void AddressArbiter::WaitThread(std::shared_ptr<Thread> thread, VAddr wait_address) {
-    thread->wait_address = wait_address;
-    thread->status = ThreadStatus::WaitArb;
-    waiting_threads.emplace_back(std::move(thread));
+void AddressArbiter::WaitThread(ThreadManager& core, VAddr wait_address,
+                                std::optional<nanoseconds> timeout) {
+    core.WaitArb(this, wait_address, timeout);
+    waiting_threads.emplace_back(core.GetCurrentThread());
 }
 
 void AddressArbiter::ResumeAllThreads(VAddr address) {
     // Determine which threads are waiting on this address, those should be woken up.
-    auto itr = std::stable_partition(waiting_threads.begin(), waiting_threads.end(),
-                                     [address](const auto& thread) {
-                                         ASSERT_MSG(thread->status == ThreadStatus::WaitArb,
-                                                    "Inconsistent AddressArbiter state");
-                                         return thread->wait_address != address;
-                                     });
+    auto itr = std::stable_partition(
+        waiting_threads.begin(), waiting_threads.end(),
+        [address](const auto& thread) { return !thread->IsWaitingOn(address); });
 
     // Wake up all the found threads
-    std::for_each(itr, waiting_threads.end(), [](auto& thread) { thread->ResumeFromWait(); });
+    std::for_each(itr, waiting_threads.end(), [](auto& thread) { thread->WakeUp(); });
 
     // Remove the woken up threads from the wait list.
     waiting_threads.erase(itr, waiting_threads.end());
@@ -45,25 +42,21 @@ void AddressArbiter::ResumeAllThreads(VAddr address) {
 std::shared_ptr<Thread> AddressArbiter::ResumeHighestPriorityThread(VAddr address) {
     // Determine which threads are waiting on this address, those should be considered for wakeup.
     auto matches_start = std::stable_partition(
-        waiting_threads.begin(), waiting_threads.end(), [address](const auto& thread) {
-            ASSERT_MSG(thread->status == ThreadStatus::WaitArb,
-                       "Inconsistent AddressArbiter state");
-            return thread->wait_address != address;
-        });
+        waiting_threads.begin(), waiting_threads.end(),
+        [address](const auto& thread) { return !thread->IsWaitingOn(address); });
 
     // Iterate through threads, find highest priority thread that is waiting to be arbitrated.
     // Note: The real kernel will pick the first thread in the list if more than one have the
     // same highest priority value. Lower priority values mean higher priority.
-    auto itr = std::min_element(matches_start, waiting_threads.end(),
-                                [](const auto& lhs, const auto& rhs) {
-                                    return lhs->current_priority < rhs->current_priority;
-                                });
+    auto itr = std::min_element(matches_start, waiting_threads.end(), [](auto& lhs, auto& rhs) {
+        return lhs->GetPriority() < rhs->GetPriority();
+    });
 
     if (itr == waiting_threads.end())
         return nullptr;
 
     auto thread = *itr;
-    thread->ResumeFromWait();
+    thread->WakeUp();
 
     waiting_threads.erase(itr);
     return thread;
@@ -80,16 +73,16 @@ std::shared_ptr<AddressArbiter> KernelSystem::CreateAddressArbiter(std::string n
     return address_arbiter;
 }
 
-void AddressArbiter::WakeUp(ThreadWakeupReason reason, std::shared_ptr<Thread> thread,
-                            std::shared_ptr<WaitObject> object) {
-    ASSERT(reason == ThreadWakeupReason::Timeout);
-    // Remove the newly-awakened thread from the Arbiter's waiting list.
-    waiting_threads.erase(std::remove(waiting_threads.begin(), waiting_threads.end(), thread),
-                          waiting_threads.end());
-};
+// void AddressArbiter::WakeUp(Thread::WakeupReason reason, std::shared_ptr<Thread> thread,
+//                             std::shared_ptr<WaitObject> object) {
+//     ASSERT(reason == Thread::WakeupReason::Timeout);
+//     // Remove the newly-awakened thread from the Arbiter's waiting list.
+//     waiting_threads.erase(std::remove(waiting_threads.begin(), waiting_threads.end(), thread),
+//                           waiting_threads.end());
+// };
 
-ResultCode AddressArbiter::ArbitrateAddress(std::shared_ptr<Thread> thread, ArbitrationType type,
-                                            VAddr address, s32 value, u64 nanoseconds) {
+ResultCode AddressArbiter::ArbitrateAddress(ThreadManager& core, ArbitrationType type,
+                                            VAddr address, s32 value, u64 timeout) {
 
     auto timeout_callback = std::dynamic_pointer_cast<WakeupCallback>(shared_from_this());
 
@@ -110,14 +103,12 @@ ResultCode AddressArbiter::ArbitrateAddress(std::shared_ptr<Thread> thread, Arbi
     // Wait current thread (acquire the arbiter)...
     case ArbitrationType::WaitIfLessThan:
         if ((s32)kernel.memory.Read32(address) < value) {
-            WaitThread(std::move(thread), address);
+            WaitThread(core, address, std::nullopt);
         }
         break;
     case ArbitrationType::WaitIfLessThanWithTimeout:
         if ((s32)kernel.memory.Read32(address) < value) {
-            thread->wakeup_callback = timeout_callback;
-            thread->WakeAfterDelay(nanoseconds);
-            WaitThread(std::move(thread), address);
+            WaitThread(core, address, nanoseconds(timeout));
         }
         break;
     case ArbitrationType::DecrementAndWaitIfLessThan: {
@@ -125,7 +116,7 @@ ResultCode AddressArbiter::ArbitrateAddress(std::shared_ptr<Thread> thread, Arbi
         if (memory_value < value) {
             // Only change the memory value if the thread should wait
             kernel.memory.Write32(address, (s32)memory_value - 1);
-            WaitThread(std::move(thread), address);
+            WaitThread(core, address, std::nullopt);
         }
         break;
     }
@@ -134,9 +125,7 @@ ResultCode AddressArbiter::ArbitrateAddress(std::shared_ptr<Thread> thread, Arbi
         if (memory_value < value) {
             // Only change the memory value if the thread should wait
             kernel.memory.Write32(address, (s32)memory_value - 1);
-            thread->wakeup_callback = timeout_callback;
-            thread->WakeAfterDelay(nanoseconds);
-            WaitThread(std::move(thread), address);
+            WaitThread(core, address, nanoseconds(timeout));
         }
         break;
     }

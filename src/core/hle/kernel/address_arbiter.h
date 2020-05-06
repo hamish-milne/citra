@@ -37,7 +37,7 @@ enum class ArbitrationType : u32 {
     DecrementAndWaitIfLessThanWithTimeout,
 };
 
-class AddressArbiter final : public Object, public WakeupCallback {
+class AddressArbiter final : public Object /*, public WakeupCallback*/ {
 public:
     explicit AddressArbiter(KernelSystem& kernel);
     ~AddressArbiter() override;
@@ -56,17 +56,17 @@ public:
 
     std::string name; ///< Name of address arbiter object (optional)
 
-    ResultCode ArbitrateAddress(std::shared_ptr<Thread> thread, ArbitrationType type, VAddr address,
-                                s32 value, u64 nanoseconds);
+    ResultCode ArbitrateAddress(ThreadManager& core, ArbitrationType type, VAddr address, s32 value,
+                                u64 timeout);
 
-    void WakeUp(ThreadWakeupReason reason, std::shared_ptr<Thread> thread,
-                std::shared_ptr<WaitObject> object);
+    // void WakeUp(Thread::WakeupReason reason, std::shared_ptr<Thread> thread,
+    //             std::shared_ptr<WaitObject> object);
 
 private:
     KernelSystem& kernel;
 
     /// Puts the thread to wait on the specified arbitration address under this address arbiter.
-    void WaitThread(std::shared_ptr<Thread> thread, VAddr wait_address);
+    void WaitThread(ThreadManager& core, VAddr wait_address, std::optional<nanoseconds> timeout);
 
     /// Resume all threads found to be waiting on the address under this address arbiter
     void ResumeAllThreads(VAddr address);
@@ -78,13 +78,14 @@ private:
     /// Threads waiting for the address arbiter to be signaled.
     std::vector<std::shared_ptr<Thread>> waiting_threads;
 
+    friend class Thread;
     friend class boost::serialization::access;
     template <class Archive>
     void serialize(Archive& ar, const unsigned int file_version) {
         ar& boost::serialization::base_object<Object>(*this);
-        if (file_version > 0) {
-            ar& boost::serialization::base_object<WakeupCallback>(*this);
-        }
+        // if (file_version > 0) {
+        //     ar& boost::serialization::base_object<WakeupCallback>(*this);
+        // }
         ar& name;
         ar& waiting_threads;
     }

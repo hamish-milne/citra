@@ -85,32 +85,31 @@ ResultCode ServerSession::HandleSyncRequest(std::shared_ptr<Thread> thread) {
     // If this ServerSession has an associated HLE handler, forward the request to it.
     if (hle_handler != nullptr) {
         std::array<u32_le, IPC::COMMAND_BUFFER_LENGTH + 2 * IPC::MAX_STATIC_BUFFERS> cmd_buf;
-        auto current_process = thread->owner_process;
-        kernel.memory.ReadBlock(*current_process, thread->GetCommandBufferAddress(), cmd_buf.data(),
+        auto& current_process = thread->Process();
+        kernel.memory.ReadBlock(current_process, thread->GetCommandBufferAddress(), cmd_buf.data(),
                                 cmd_buf.size() * sizeof(u32));
 
         auto context =
             std::make_shared<Kernel::HLERequestContext>(kernel, SharedFrom(this), thread);
-        context->PopulateFromIncomingCommandBuffer(cmd_buf.data(), current_process);
+        context->PopulateFromIncomingCommandBuffer(cmd_buf.data(), SharedFrom(*current_process));
 
         hle_handler->HandleSyncRequest(*context);
 
-        ASSERT(thread->status == Kernel::ThreadStatus::Running ||
-               thread->status == Kernel::ThreadStatus::WaitHleEvent);
+        ASSERT(thread->GetStatus() == Kernel::ThreadStatus::Running ||
+               thread->GetStatus() == Kernel::ThreadStatus::WaitHleEvent);
         // Only write the response immediately if the thread is still running. If the HLE handler
         // put the thread to sleep then the writing of the command buffer will be deferred to the
         // wakeup callback.
-        if (thread->status == Kernel::ThreadStatus::Running) {
-            context->WriteToOutgoingCommandBuffer(cmd_buf.data(), *current_process);
-            kernel.memory.WriteBlock(*current_process, thread->GetCommandBufferAddress(),
+        if (thread->GetStatus() == Kernel::ThreadStatus::Running) {
+            context->WriteToOutgoingCommandBuffer(cmd_buf.data(), current_process);
+            kernel.memory.WriteBlock(current_process, thread->GetCommandBufferAddress(),
                                      cmd_buf.data(), cmd_buf.size() * sizeof(u32));
         }
     }
 
-    if (thread->status == ThreadStatus::Running) {
+    if (thread->GetStatus() == ThreadStatus::Running) {
         // Put the thread to sleep until the server replies, it will be awoken in
         // svcReplyAndReceive for LLE servers.
-        thread->status = ThreadStatus::WaitIPC;
 
         if (hle_handler != nullptr) {
             // For HLE services, we put the request threads to sleep for a short duration to
@@ -124,8 +123,9 @@ ResultCode ServerSession::HandleSyncRequest(std::shared_ptr<Thread> thread) {
             // request to the GSP:GPU service in a n3DS with firmware 11.6. The measured values have
             // a high variance and vary between models.
             static constexpr u64 IPCDelayNanoseconds = 39000;
-            thread->WakeAfterDelay(IPCDelayNanoseconds);
+            thread->Core().Sleep(nanoseconds(IPCDelayNanoseconds));
         } else {
+            thread->Core().Sleep();
             // Add the thread to the list of threads that have issued a sync request with this
             // server.
             pending_requesting_threads.push_back(std::move(thread));

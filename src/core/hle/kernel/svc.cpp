@@ -716,7 +716,7 @@ ResultCode SVC::ReplyAndReceive(s32* index, VAddr handles_address, s32 handle_co
         ASSERT(translation_result.IsSuccess());
 
         // Note: The scheduler is not invoked here.
-        request_thread->ResumeFromWait();
+        request_thread->WakeUp();
     }
 
     if (handle_count == 0) {

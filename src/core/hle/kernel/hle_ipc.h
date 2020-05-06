@@ -167,6 +167,18 @@ private:
     friend class boost::serialization::access;
 };
 
+class IPCCallback {
+public:
+    virtual ~IPCCallback() = default;
+    virtual void Continue(Thread& thread, HLERequestContext& context,
+                          Thread::WakeupReason reason) = 0;
+
+private:
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned int) {}
+    friend class boost::serialization::access;
+};
+
 /**
  * Class containing information about an in-flight IPC request being handled by an HLE service
  * implementation.
@@ -215,18 +227,6 @@ public:
         return session;
     }
 
-    class WakeupCallback {
-    public:
-        virtual ~WakeupCallback() = default;
-        virtual void WakeUp(std::shared_ptr<Thread> thread, HLERequestContext& context,
-                            Thread::WakeupReason reason) = 0;
-
-    private:
-        template <class Archive>
-        void serialize(Archive& ar, const unsigned int) {}
-        friend class boost::serialization::access;
-    };
-
     /**
      * Puts the specified guest thread to sleep until the returned event is signaled or until the
      * specified timeout expires.
@@ -240,7 +240,10 @@ public:
      */
     std::shared_ptr<Event> SleepClientThread(const std::string& reason,
                                              std::chrono::nanoseconds timeout,
-                                             std::shared_ptr<WakeupCallback> callback);
+                                             std::shared_ptr<IPCCallback> callback);
+
+    void OnWakeUp(Thread* thread, Thread::WakeupReason reason,
+                  std::shared_ptr<IPCCallback> callback);
 
     /**
      * Resolves a object id from the request command buffer into a pointer to an object. See the

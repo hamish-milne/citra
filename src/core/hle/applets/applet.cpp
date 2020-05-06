@@ -38,9 +38,9 @@ namespace HLE::Applets {
 
 static std::unordered_map<Service::APT::AppletId, std::shared_ptr<Applet>> applets;
 /// The CoreTiming event identifier for the Applet update callback.
-static Core::TimingEventType* applet_update_event = nullptr;
+static std::unique_ptr<Core::Event> applet_update_event = nullptr;
 /// The interval at which the Applet update callback will be called, 16.6ms
-static const u64 applet_update_interval_us = 16666;
+static const Ticks applet_update_interval{std::chrono::microseconds(16666)};
 
 ResultCode Applet::Create(Service::APT::AppletId id,
                           std::weak_ptr<Service::APT::AppletManager> manager) {
@@ -79,22 +79,29 @@ std::shared_ptr<Applet> Applet::Get(Service::APT::AppletId id) {
 }
 
 /// Handles updating the current Applet every time it's called.
-static void AppletUpdateEvent(u64 applet_id, s64 cycles_late) {
-    Service::APT::AppletId id = static_cast<Service::APT::AppletId>(applet_id);
-    std::shared_ptr<Applet> applet = Applet::Get(id);
-    ASSERT_MSG(applet != nullptr, "Applet doesn't exist! applet_id={:08X}", static_cast<u32>(id));
-
-    applet->Update();
-
-    // If the applet is still running after the last update, reschedule the event
-    if (applet->IsRunning()) {
-        Core::System::GetInstance().CoreTiming().ScheduleEvent(
-            usToCycles(applet_update_interval_us) - cycles_late, applet_update_event, applet_id);
-    } else {
-        // Otherwise the applet has terminated, in which case we should clean it up
-        applets[id] = nullptr;
+class AppletUpdateEvent : public Core::Event {
+public:
+    const std::string& Name() const override {
+        return "HLE Applet Update Event";
     }
-}
+
+    void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {
+        Service::APT::AppletId id = static_cast<Service::APT::AppletId>(userdata);
+        std::shared_ptr<Applet> applet = Applet::Get(id);
+        ASSERT_MSG(applet != nullptr, "Applet doesn't exist! applet_id={:08X}",
+                   static_cast<u32>(id));
+
+        applet->Update();
+
+        // If the applet is still running after the last update, reschedule the event
+        if (applet->IsRunning()) {
+            timing.ScheduleEvent(this, applet_update_interval, userdata);
+        } else {
+            // Otherwise the applet has terminated, in which case we should clean it up
+            applets[id] = nullptr;
+        }
+    }
+};
 
 ResultCode Applet::Start(const Service::APT::AppletStartupParameter& parameter) {
     ResultCode result = StartImpl(parameter);
@@ -102,7 +109,7 @@ ResultCode Applet::Start(const Service::APT::AppletStartupParameter& parameter) 
         return result;
     // Schedule the update event
     Core::System::GetInstance().CoreTiming().ScheduleEvent(
-        usToCycles(applet_update_interval_us), applet_update_event, static_cast<u64>(id));
+        applet_update_event.get(), applet_update_interval, static_cast<u64>(id));
     return result;
 }
 
@@ -128,11 +135,8 @@ bool IsLibraryAppletRunning() {
 
 void Init() {
     // Register the applet update callback
-    applet_update_event = Core::System::GetInstance().CoreTiming().RegisterEvent(
-        "HLE Applet Update Event", AppletUpdateEvent);
+    applet_update_event = std::make_unique<AppletUpdateEvent>();
 }
 
-void Shutdown() {
-    Core::System::GetInstance().CoreTiming().RemoveEvent(applet_update_event);
-}
+void Shutdown() {}
 } // namespace HLE::Applets

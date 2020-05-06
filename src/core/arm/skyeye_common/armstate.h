@@ -148,7 +148,7 @@ enum {
 struct ARMul_State final {
 public:
     explicit ARMul_State(Core::System* system, Memory::MemorySystem& memory,
-                         PrivilegeMode initial_mode);
+                         PrivilegeMode initial_mode, Core::Timing& timer);
 
     void ChangePrivilegeMode(u32 new_mode);
     void Reset();
@@ -208,6 +208,7 @@ public:
 
     Core::System* system;
     Memory::MemorySystem& memory;
+    Core::Timing& timer;
 
     std::array<u32, 16> Reg{}; // The current register file
     std::array<u32, 2> Reg_usr{};

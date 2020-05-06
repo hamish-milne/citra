@@ -9,7 +9,7 @@
 // #include <unordered_map>
 // #include <vector>
 // #include <boost/container/flat_set.hpp>
-// #include <boost/serialization/export.hpp>
+#include <boost/serialization/export.hpp>
 // #include <boost/serialization/shared_ptr.hpp>
 // #include <boost/serialization/unordered_map.hpp>
 // #include <boost/serialization/vector.hpp>
@@ -34,10 +34,23 @@
 
 namespace Kernel {
 
+class HLERequestContext;
+class IPCCallback;
+
 class Thread : public WaitObject {
 
 public:
-    enum Status : u32 { Running, Ready, WaitSleep, WaitSyncAll, WaitSyncAny, Created, Destroyed };
+    enum Status : u32 {
+        Running,
+        Ready,
+        WaitSleep,
+        WaitSyncAll,
+        WaitSyncAny,
+        WaitIPC,
+        WaitArb,
+        Created,
+        Destroyed
+    };
     enum Priority : u32 { Highest = 0, UserlandMax = 24, Default = 48, Lowest = 63 };
     enum class WakeupReason {
         Signal, // The thread was woken up by WakeupAllWaitingThreads due to an object signal.
@@ -53,11 +66,42 @@ public:
     }
 
     void ResumeFromWait(Kernel::WaitObject* object);
+    void WakeUp();
     void SetPriority(u32 value);
     u32 GetPriority();
+    Status GetStatus() const {
+        return status;
+    }
+    ThreadManager& Core() {
+        return core;
+    }
+
+    Kernel::Process& Process() {
+        return *process;
+    }
+
+    VAddr GetCommandBufferAddress() const {
+        // Offset from the start of TLS at which the IPC command buffer begins.
+        constexpr u32 command_header_offset = 0x80;
+        return tls_address + command_header_offset;
+    }
 
     void OnAcquireMutex(Kernel::Mutex* mutex);
     void OnReleaseMutex(Kernel::Mutex* mutex);
+    bool IsWaitingOn(VAddr address) const;
+    void WaitHleEvent(HLERequestContext* context, std::shared_ptr<Kernel::Event> hle_event,
+                      nanoseconds timeout, std::shared_ptr<IPCCallback> callback);
+
+    // TODO: Check this - only used for debug?
+    void SaveContext();
+    void SetMainThread() {
+        context->SetFpscr(FPSCR_DEFAULT_NAN | FPSCR_FLUSH_TO_ZERO | FPSCR_ROUND_TOZERO |
+                          FPSCR_IXC); // 0x03C00010
+    }
+
+    u32 GetThreadId() const {
+        return GetObjectId();
+    }
 
 private:
     int Order() {
@@ -78,13 +122,22 @@ private:
     Status status = Status::Created;
     u32 nominal_priority = Priority::Default;
     std::optional<u32> real_priority{};
+    std::shared_ptr<Kernel::AddressArbiter> arbiter;
+    VAddr wait_address;
+    std::shared_ptr<HLERequestContext> hle_context;
+    std::shared_ptr<IPCCallback> hle_callback;
 
-    void WakeUp();
     void Stop();
     void SetStatus(Status status);
     bool IsWokenBy(const Kernel::WaitObject* object);
 
     friend class ThreadManager;
+
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned int file_version) {
+        // TODO:
+    }
+    friend class boost::serialization::access;
 };
 
 class WakeupCallback {
@@ -104,10 +157,12 @@ class ThreadManager {
 public:
     explicit ThreadManager(u32 core_id, std::unique_ptr<ARM_Interface> cpu);
 
-    ResultCode WaitOne(Kernel::WaitObject* object, std::chrono::nanoseconds timeout);
-    ResultCode WaitAny(std::vector<Kernel::WaitObject*> objects, std::chrono::nanoseconds timeout);
-    ResultCode WaitAll(std::vector<Kernel::WaitObject*> objects, std::chrono::nanoseconds timeout);
-    void Sleep(std::chrono::nanoseconds nanoseconds);
+    ResultCode WaitOne(Kernel::WaitObject* object, nanoseconds timeout);
+    ResultCode WaitAny(std::vector<Kernel::WaitObject*> objects, nanoseconds timeout);
+    ResultCode WaitAll(std::vector<Kernel::WaitObject*> objects, nanoseconds timeout);
+    ResultCode WaitIPC(std::vector<Kernel::WaitObject*> objects);
+    void WaitArb(AddressArbiter* arbiter, VAddr address, std::optional<nanoseconds> timeout);
+    void Sleep(nanoseconds timeout);
     void Sleep();
     void Stop();
 
@@ -117,11 +172,11 @@ public:
     const Kernel::Process& Process() const {
         return *thread->process;
     }
-    Kernel::Thread& Thread() {
-        return *thread;
+    Kernel::Thread* GetCurrentThread() {
+        return thread;
     }
-    const Kernel::Thread& Thread() const {
-        return *thread;
+    const Kernel::Thread* GetCurrentThread() const {
+        return thread;
     }
     ARM_Interface& CPU() {
         return *cpu;
@@ -139,8 +194,13 @@ public:
         cycles_remaining = cycles_remaining - count;
     }
 
+    const std::vector<Kernel::Thread*>& GetThreadList() {
+        return threads;
+    }
+
 private:
     u32 core_id;
+    KernelSystem& kernel;
     Core::Timing& root;
     Kernel::Thread* thread;
     std::unique_ptr<ARM_Interface> cpu;
@@ -162,6 +222,12 @@ private:
 
     friend class Core::Timing;
     friend class Thread;
+
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned int file_version) {
+        // TODO:
+    }
+    friend class boost::serialization::access;
 };
 
 // class Mutex;

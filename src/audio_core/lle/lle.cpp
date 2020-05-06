@@ -178,7 +178,7 @@ struct DspLle::Impl final {
 
     public:
         TeakraSliceEvent(Impl& parent_) : parent(parent_) {}
-        const std::string& Name() override {
+        const std::string& Name() const override {
             return "DSP slice";
         }
         void Execute(Core::Timing& timing, u64 userdata, Ticks late) {
@@ -332,7 +332,8 @@ struct DspLle::Impl final {
 
         // TODO: load special segment
 
-        Core::System::GetInstance().CoreTiming().ScheduleEvent(TeakraSlice, teakra_slice_event, 0);
+        Core::System::GetInstance().CoreTiming().ScheduleEvent(teakra_slice_event.get(),
+                                                               Ticks(TeakraSlice), 0);
 
         if (multithread) {
             teakra_thread = std::thread(&Impl::TeakraThread, this);
@@ -377,7 +378,7 @@ struct DspLle::Impl final {
 
         teakra.RecvData(2); // discard the value
 
-        Core::System::GetInstance().CoreTiming().UnscheduleEvent(teakra_slice_event, 0);
+        Core::System::GetInstance().CoreTiming().UnscheduleEvent(teakra_slice_event.get(), 0);
         StopTeakraThread();
     }
 };

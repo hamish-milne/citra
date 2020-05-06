@@ -137,10 +137,10 @@ public:
     }
 
     void AddTicks(std::uint64_t ticks) override {
-        parent.GetTimer().AddTicks(ticks);
+        parent.timer.AddTicks(ticks);
     }
     std::uint64_t GetTicksRemaining() override {
-        s64 ticks = parent.GetTimer().GetDowncount();
+        s64 ticks = parent.timer.GetDowncount();
         return static_cast<u64>(ticks <= 0 ? 0 : ticks);
     }
 
@@ -150,7 +150,7 @@ public:
 };
 
 ARM_Dynarmic::ARM_Dynarmic(Core::System* system, Memory::MemorySystem& memory, u32 id,
-                           std::shared_ptr<Core::Timing::Timer> timer)
+                           Core::Timing& timer)
     : ARM_Interface(id, timer), system(*system), memory(memory),
       cb(std::make_unique<DynarmicUserCallbacks>(*this)) {
     SetPageTable(memory.GetCurrentPageTable());
@@ -312,8 +312,8 @@ void ARM_Dynarmic::SetPageTable(const std::shared_ptr<Memory::PageTable>& page_t
 }
 
 void ARM_Dynarmic::ServeBreak() {
-    Kernel::Thread* thread = system.Kernel().GetCurrentThreadManager().GetCurrentThread();
-    SaveContext(thread->context);
+    auto thread = system.Kernel().GetCurrentThreadManager().GetCurrentThread();
+    thread->SaveContext();
     GDBStub::Break();
     GDBStub::SendTrap(thread, 5);
 }

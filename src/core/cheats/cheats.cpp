@@ -14,22 +14,43 @@
 
 namespace Cheats {
 
-constexpr u64 run_interval_ticks = BASE_CLOCK_RATE_ARM11 / 60;
+static const Ticks run_interval_ticks{BASE_CLOCK_RATE_ARM11 / 60};
 
 CheatEngine::CheatEngine(Core::System& system_) : system(system_) {
     LoadCheatFile();
     Connect();
 }
 
+class CheatEngine::RunCallback : public Core::Event {
+    CheatEngine& parent;
+
+public:
+    explicit RunCallback(CheatEngine& parent_) : parent(parent_) {}
+
+    const std::string& Name() const override {
+        return "CheatCore::run_event";
+    }
+
+    void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {
+        {
+            std::shared_lock<std::shared_mutex> lock(parent.cheats_list_mutex);
+            for (auto& cheat : parent.cheats_list) {
+                if (cheat->IsEnabled()) {
+                    cheat->Execute(parent.system);
+                }
+            }
+        }
+        timing.ScheduleEvent(this, run_interval_ticks - cycles_late);
+    }
+};
+
 void CheatEngine::Connect() {
-    event = system.CoreTiming().RegisterEvent(
-        "CheatCore::run_event",
-        [this](u64 thread_id, s64 cycle_late) { RunCallback(thread_id, cycle_late); });
-    system.CoreTiming().ScheduleEvent(run_interval_ticks, event);
+    event = std::make_unique<RunCallback>(*this);
+    system.CoreTiming().ScheduleEvent(event.get(), run_interval_ticks);
 }
 
 CheatEngine::~CheatEngine() {
-    system.CoreTiming().UnscheduleEvent(event, 0);
+    system.CoreTiming().UnscheduleEvent(event.get(), 0);
 }
 
 std::vector<std::shared_ptr<CheatBase>> CheatEngine::GetCheats() const {
@@ -97,18 +118,6 @@ void CheatEngine::LoadCheatFile() {
         std::unique_lock<std::shared_mutex> lock(cheats_list_mutex);
         std::move(gateway_cheats.begin(), gateway_cheats.end(), std::back_inserter(cheats_list));
     }
-}
-
-void CheatEngine::RunCallback([[maybe_unused]] u64 userdata, int cycles_late) {
-    {
-        std::shared_lock<std::shared_mutex> lock(cheats_list_mutex);
-        for (auto& cheat : cheats_list) {
-            if (cheat->IsEnabled()) {
-                cheat->Execute(system);
-            }
-        }
-    }
-    system.CoreTiming().ScheduleEvent(run_interval_ticks - cycles_late, event);
 }
 
 } // namespace Cheats

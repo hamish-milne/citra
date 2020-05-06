@@ -84,8 +84,7 @@ enum class MemoryRegion : u16 {
 
 class KernelSystem {
 public:
-    explicit KernelSystem(Memory::MemorySystem& memory, Core::Timing& timing,
-                          std::function<void()> prepare_reschedule_callback, u32 system_mode,
+    explicit KernelSystem(Memory::MemorySystem& memory, Core::Timing& timing, u32 system_mode,
                           u32 num_cores, u8 n3ds_mode);
     ~KernelSystem();
 
@@ -211,14 +210,14 @@ public:
     std::shared_ptr<Process> GetProcessById(u32 process_id) const;
 
     std::shared_ptr<Process> GetCurrentProcess() const;
-    void SetCurrentProcess(std::shared_ptr<Process> process);
-    void SetCurrentProcessForCPU(std::shared_ptr<Process> process, u32 core_id);
+    // void SetCurrentProcess(std::shared_ptr<Process> process);
+    // void SetCurrentProcessForCPU(std::shared_ptr<Process> process, u32 core_id);
 
-    void SetCurrentMemoryPageTable(std::shared_ptr<Memory::PageTable> page_table);
+    // void SetCurrentMemoryPageTable(std::shared_ptr<Memory::PageTable> page_table);
 
-    void SetCPUs(std::vector<std::shared_ptr<ARM_Interface>> cpu);
+    // void SetCPUs(std::vector<std::shared_ptr<ARM_Interface>> cpu);
 
-    void SetRunningCPU(ARM_Interface* cpu);
+    // void SetRunningCPU(ARM_Interface* cpu);
 
     ThreadManager& GetThreadManager(u32 core_id);
     const ThreadManager& GetThreadManager(u32 core_id) const;
@@ -246,9 +245,9 @@ public:
     /// Adds a port to the named port table
     void AddNamedPort(std::string name, std::shared_ptr<ClientPort> port);
 
-    void PrepareReschedule() {
-        prepare_reschedule_callback();
-    }
+    // void PrepareReschedule() {
+    //     prepare_reschedule_callback();
+    // }
 
     u32 NewThreadId();
 
@@ -266,7 +265,7 @@ public:
 private:
     void MemoryInit(u32 mem_type, u8 n3ds_mode);
 
-    std::function<void()> prepare_reschedule_callback;
+    // std::function<void()> prepare_reschedule_callback;
 
     std::unique_ptr<ResourceLimitList> resource_limits;
     std::atomic<u32> next_object_id{0};
@@ -287,10 +286,10 @@ private:
     // Lists all processes that exist in the current session.
     std::vector<std::shared_ptr<Process>> process_list;
 
-    std::shared_ptr<Process> current_process;
-    std::vector<std::shared_ptr<Process>> stored_processes;
+    // std::shared_ptr<Process> current_process;
+    // std::vector<std::shared_ptr<Process>> stored_processes;
 
-    std::vector<std::unique_ptr<ThreadManager>> thread_managers;
+    // std::vector<std::unique_ptr<ThreadManager>> thread_managers;
 
     std::shared_ptr<ConfigMem::Handler> config_mem_handler;
     std::shared_ptr<SharedPage::Handler> shared_page_handler;
