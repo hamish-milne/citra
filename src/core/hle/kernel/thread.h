@@ -99,9 +99,14 @@ public:
                           FPSCR_IXC); // 0x03C00010
     }
 
+    // TODO: Use sequential IDs
     u32 GetThreadId() const {
         return GetObjectId();
     }
+    bool IsWokenBy(const Kernel::WaitObject* object);
+
+    // TODO: Move to private
+    const std::unique_ptr<ARM_Interface::ThreadContext> context;
 
 private:
     int Order() {
@@ -112,7 +117,6 @@ private:
 
     ThreadManager& core;
     const std::string name;
-    const std::unique_ptr<ARM_Interface::ThreadContext> context;
     const std::shared_ptr<Kernel::Process> process;
     const std::unique_ptr<WakeupEvent> wakeup_event;
     const VAddr tls_address;
@@ -129,7 +133,6 @@ private:
 
     void Stop();
     void SetStatus(Status status);
-    bool IsWokenBy(const Kernel::WaitObject* object);
 
     friend class ThreadManager;
 

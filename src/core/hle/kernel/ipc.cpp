@@ -24,12 +24,12 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
                                   VAddr dst_address,
                                   std::vector<MappedBufferContext>& mapped_buffer_context,
                                   bool reply) {
-    auto& src_process = src_thread->owner_process;
-    auto& dst_process = dst_thread->owner_process;
+    auto& src_process = src_thread->Process();
+    auto& dst_process = dst_thread->Process();
 
     IPC::Header header;
     // TODO(Subv): Replace by Memory::Read32 when possible.
-    memory.ReadBlock(*src_process, src_address, &header.raw, sizeof(header.raw));
+    memory.ReadBlock(src_process, src_address, &header.raw, sizeof(header.raw));
 
     std::size_t untranslated_size = 1u + header.normal_params_size;
     std::size_t command_size = untranslated_size + header.translate_params_size;
@@ -38,7 +38,7 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
     ASSERT(command_size <= IPC::COMMAND_BUFFER_LENGTH);
 
     std::array<u32, IPC::COMMAND_BUFFER_LENGTH> cmd_buf;
-    memory.ReadBlock(*src_process, src_address, cmd_buf.data(), command_size * sizeof(u32));
+    memory.ReadBlock(src_process, src_address, cmd_buf.data(), command_size * sizeof(u32));
 
     const bool should_record = kernel.GetIPCRecorder().IsEnabled();
 
@@ -72,11 +72,11 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
                 if (handle == CurrentThread) {
                     object = src_thread;
                 } else if (handle == CurrentProcess) {
-                    object = src_process;
+                    object = SharedFrom(&src_process);
                 } else if (handle != 0) {
-                    object = src_process->handle_table.GetGeneric(handle);
+                    object = src_process.handle_table.GetGeneric(handle);
                     if (descriptor == IPC::DescriptorType::MoveHandle) {
-                        src_process->handle_table.Close(handle);
+                        src_process.handle_table.Close(handle);
                     }
                 }
 
@@ -87,13 +87,13 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
                     continue;
                 }
 
-                auto result = dst_process->handle_table.Create(std::move(object));
+                auto result = dst_process.handle_table.Create(std::move(object));
                 cmd_buf[i++] = result.ValueOr(0);
             }
             break;
         }
         case IPC::DescriptorType::CallingPid: {
-            cmd_buf[i++] = src_process->process_id;
+            cmd_buf[i++] = src_process.process_id;
             break;
         }
         case IPC::DescriptorType::StaticBuffer: {
@@ -101,7 +101,7 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
             VAddr static_buffer_src_address = cmd_buf[i];
 
             std::vector<u8> data(bufferInfo.size);
-            memory.ReadBlock(*src_process, static_buffer_src_address, data.data(), data.size());
+            memory.ReadBlock(src_process, static_buffer_src_address, data.data(), data.size());
 
             // Grab the address that the target thread set up to receive the response static buffer
             // and write our data there. The static buffers area is located right after the command
@@ -117,7 +117,7 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
 
             u32 static_buffer_offset = IPC::COMMAND_BUFFER_LENGTH * sizeof(u32) +
                                        sizeof(StaticBuffer) * bufferInfo.buffer_id;
-            memory.ReadBlock(*dst_process, dst_address + static_buffer_offset, &target_buffer,
+            memory.ReadBlock(dst_process, dst_address + static_buffer_offset, &target_buffer,
                              sizeof(target_buffer));
 
             // Note: The real kernel doesn't seem to have any error recovery mechanisms for this
@@ -125,7 +125,7 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
             ASSERT_MSG(target_buffer.descriptor.size >= data.size(),
                        "Static buffer data is too big");
 
-            memory.WriteBlock(*dst_process, target_buffer.address, data.data(), data.size());
+            memory.WriteBlock(dst_process, target_buffer.address, data.data(), data.size());
 
             cmd_buf[i++] = target_buffer.address;
             break;
@@ -166,20 +166,20 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
                     // Copy the modified buffer back into the target process
                     // NOTE: As this is a reply the "source" is the destination and the
                     //       "target" is the source.
-                    memory.CopyBlock(*dst_process, *src_process, found->source_address,
+                    memory.CopyBlock(dst_process, src_process, found->source_address,
                                      found->target_address, size);
                 }
 
                 VAddr prev_reserve = page_start - Memory::PAGE_SIZE;
                 VAddr next_reserve = page_start + num_pages * Memory::PAGE_SIZE;
 
-                auto& prev_vma = src_process->vm_manager.FindVMA(prev_reserve)->second;
-                auto& next_vma = src_process->vm_manager.FindVMA(next_reserve)->second;
+                auto& prev_vma = src_process.vm_manager.FindVMA(prev_reserve)->second;
+                auto& next_vma = src_process.vm_manager.FindVMA(next_reserve)->second;
                 ASSERT(prev_vma.meminfo_state == MemoryState::Reserved &&
                        next_vma.meminfo_state == MemoryState::Reserved);
 
                 // Unmap the buffer and guard pages from the source process
-                ResultCode result = src_process->vm_manager.UnmapRange(
+                ResultCode result = src_process.vm_manager.UnmapRange(
                     page_start - Memory::PAGE_SIZE, (num_pages + 2) * Memory::PAGE_SIZE);
                 ASSERT(result == RESULT_SUCCESS);
 
@@ -196,17 +196,17 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
             // Reserve a page of memory before the mapped buffer
             std::shared_ptr<BackingMem> reserve_buffer =
                 std::make_shared<BufferMem>(Memory::PAGE_SIZE);
-            dst_process->vm_manager.MapBackingMemoryToBase(
+            dst_process.vm_manager.MapBackingMemoryToBase(
                 Memory::IPC_MAPPING_VADDR, Memory::IPC_MAPPING_SIZE, reserve_buffer,
                 Memory::PAGE_SIZE, Kernel::MemoryState::Reserved);
 
             std::shared_ptr<BackingMem> buffer =
                 std::make_shared<BufferMem>(num_pages * Memory::PAGE_SIZE);
-            memory.ReadBlock(*src_process, source_address, buffer->GetPtr() + page_offset, size);
+            memory.ReadBlock(src_process, source_address, buffer->GetPtr() + page_offset, size);
 
             // Map the page(s) into the target process' address space.
             target_address =
-                dst_process->vm_manager
+                dst_process.vm_manager
                     .MapBackingMemoryToBase(Memory::IPC_MAPPING_VADDR, Memory::IPC_MAPPING_SIZE,
                                             buffer, buffer->GetSize(), Kernel::MemoryState::Shared)
                     .Unwrap();
@@ -214,7 +214,7 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
             cmd_buf[i++] = target_address + page_offset;
 
             // Reserve a page of memory after the mapped buffer
-            dst_process->vm_manager.MapBackingMemoryToBase(
+            dst_process.vm_manager.MapBackingMemoryToBase(
                 Memory::IPC_MAPPING_VADDR, Memory::IPC_MAPPING_SIZE, reserve_buffer,
                 reserve_buffer->GetSize(), Kernel::MemoryState::Reserved);
 
@@ -240,7 +240,7 @@ ResultCode TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySy
         }
     }
 
-    memory.WriteBlock(*dst_process, dst_address, cmd_buf.data(), command_size * sizeof(u32));
+    memory.WriteBlock(dst_process, dst_address, cmd_buf.data(), command_size * sizeof(u32));
 
     return RESULT_SUCCESS;
 }

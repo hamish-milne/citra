@@ -91,23 +91,23 @@ ResultCode ServerSession::HandleSyncRequest(std::shared_ptr<Thread> thread) {
 
         auto context =
             std::make_shared<Kernel::HLERequestContext>(kernel, SharedFrom(this), thread);
-        context->PopulateFromIncomingCommandBuffer(cmd_buf.data(), SharedFrom(*current_process));
+        context->PopulateFromIncomingCommandBuffer(cmd_buf.data(), SharedFrom(&current_process));
 
         hle_handler->HandleSyncRequest(*context);
 
-        ASSERT(thread->GetStatus() == Kernel::ThreadStatus::Running ||
-               thread->GetStatus() == Kernel::ThreadStatus::WaitHleEvent);
+        ASSERT(thread->GetStatus() == Thread::Status::Running ||
+               thread->GetStatus() == Thread::Status::WaitSyncAny);
         // Only write the response immediately if the thread is still running. If the HLE handler
         // put the thread to sleep then the writing of the command buffer will be deferred to the
         // wakeup callback.
-        if (thread->GetStatus() == Kernel::ThreadStatus::Running) {
+        if (thread->GetStatus() == Thread::Status::Running) {
             context->WriteToOutgoingCommandBuffer(cmd_buf.data(), current_process);
             kernel.memory.WriteBlock(current_process, thread->GetCommandBufferAddress(),
                                      cmd_buf.data(), cmd_buf.size() * sizeof(u32));
         }
     }
 
-    if (thread->GetStatus() == ThreadStatus::Running) {
+    if (thread->GetStatus() == Thread::Status::Running) {
         // Put the thread to sleep until the server replies, it will be awoken in
         // svcReplyAndReceive for LLE servers.
 

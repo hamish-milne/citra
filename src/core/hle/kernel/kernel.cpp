@@ -165,7 +165,7 @@ void KernelSystem::serialize(Archive& ar, const unsigned int file_version) {
     ar&* timer_manager.get();
     ar& next_process_id;
     ar& process_list;
-    ar& current_process;
+    // ar& current_process;
     // NB: core count checked in 'core'
     // for (auto& thread_manager : thread_managers) {
     //     ar&* thread_manager.get();
