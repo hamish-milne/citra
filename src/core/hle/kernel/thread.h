@@ -43,12 +43,13 @@ class IPCCallback;
 class Thread : public WaitObject {
 
 public:
-    enum Status : u32 {
+    enum class Status : u32 {
         Running,
         Ready,
         WaitSleep,
         WaitSyncAll,
         WaitSyncAny,
+        WaitHleEvent,
         WaitIPC,
         WaitArb,
         Created,
@@ -139,7 +140,7 @@ public:
 
 private:
     int Order() {
-        return status * (Priority::Lowest + 1) + GetPriority();
+        return u32(status) * (Priority::Lowest + 1) + GetPriority();
     }
 
     class WakeupEvent;
@@ -161,6 +162,9 @@ private:
     VAddr wait_address;
     std::shared_ptr<HLERequestContext> hle_context;
     std::shared_ptr<IPCCallback> hle_callback;
+    s32* sync_output;
+
+    ResultCode SyncOutput(ResultCode result, std::optional<u32> output = std::nullopt);
 
     void SetStatus(Status status);
 
@@ -207,9 +211,9 @@ public:
     explicit ThreadManager(u32 core_id, std::unique_ptr<ARM_Interface> cpu);
 
     ResultCode WaitOne(ObjectPtr object, nanoseconds timeout);
-    ResultCode WaitAny(std::vector<ObjectPtr> objects, nanoseconds timeout);
+    ResultCode WaitAny(std::vector<ObjectPtr> objects, nanoseconds timeout, s32* index);
     ResultCode WaitAll(std::vector<ObjectPtr> objects, nanoseconds timeout);
-    ResultCode WaitIPC(std::vector<ObjectPtr> objects);
+    ResultCode WaitIPC(std::vector<ObjectPtr> objects, s32* index);
     void WaitArb(AddressArbiter* arbiter, VAddr address, std::optional<nanoseconds> timeout);
     void Sleep(nanoseconds timeout);
     void Sleep();

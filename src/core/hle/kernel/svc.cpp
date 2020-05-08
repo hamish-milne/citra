@@ -540,12 +540,12 @@ ResultCode SVC::WaitSynchronizationN(s32* out, VAddr handles_address, s32 handle
     }
 
     if (wait_all) {
-        // TODO: Pass in 'out' here
+        *out = -1;
         return kernel.GetCurrentThreadManager().WaitAll(std::move(objects),
                                                         nanoseconds(nano_seconds));
     } else {
         return kernel.GetCurrentThreadManager().WaitAny(std::move(objects),
-                                                        nanoseconds(nano_seconds));
+                                                        nanoseconds(nano_seconds), out);
     }
 
     // if (wait_all) {
@@ -742,8 +742,7 @@ ResultCode SVC::ReplyAndReceive(s32* index, VAddr handles_address, s32 handle_co
         return RESULT_SUCCESS;
     }
 
-    // TODO: Deal with 'index'
-    return kernel.GetCurrentThreadManager().WaitIPC(std::move(objects));
+    return kernel.GetCurrentThreadManager().WaitIPC(std::move(objects), index);
 
     // // Find the first object that is acquirable in the provided list of objects
     // auto itr = std::find_if(objects.begin(), objects.end(), [thread](const ObjectPtr& object) {
