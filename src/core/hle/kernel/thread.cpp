@@ -15,11 +15,11 @@
 // #include "common/serialization/boost_flat_set.h"
 // #include "core/arm/arm_interface.h"
 #include "core/arm/skyeye_common/armstate.h"
-// #include "core/core.h"
+#include "core/core.h"
 #include "core/hle/kernel/errors.h"
 // #include "core/hle/kernel/handle_table.h"
 // #include "core/hle/kernel/kernel.h"
-// #include "core/hle/kernel/memory.h"
+#include "core/hle/kernel/memory.h"
 #include "core/hle/kernel/mutex.h"
 // #include "core/hle/kernel/process.h"
 #include "core/hle/kernel/thread.h"
@@ -111,7 +111,10 @@ std::shared_ptr<Thread> ThreadManager::CreateThread(
     context.SetProgramCounter(entry_point);
     context.SetStackPointer(stack_top);
     context.SetCpsr(USER32MODE | ((entry_point & 1) << 5)); // Usermode and THUMB mode
-    return std::shared_ptr<Thread>(thread);
+    auto ptr = std::shared_ptr<Thread>(thread);
+    threads.push_back(ptr);
+    thread->status = Thread::Status::Ready;
+    return ptr;
 }
 
 ResultVal<std::shared_ptr<Thread>> KernelSystem::CreateThread(
@@ -151,7 +154,7 @@ Thread::Thread(KernelSystem& kernel, ThreadManager& core_, std::string name_,
                std::shared_ptr<Kernel::Process> process_, VAddr tls_address_)
     : WaitObject(kernel), core(core_), name(std::move(name_)),
       wakeup_event(new Thread::WakeupEvent(*this)), process(std::move(process_)),
-      context(core.cpu->NewContext()), tls_address(tls_address_) {}
+      context(core_.cpu->NewContext()), tls_address(tls_address_) {}
 
 Thread::Thread(KernelSystem& kernel, u32 core_id)
     : WaitObject(kernel), core(kernel.GetThreadManager(core_id)) {}
@@ -168,7 +171,9 @@ Ticks ThreadManager::RunSegment(::Ticks segment_length) {
     do {
         if (Reschedule()) {
             // TODO: Change CPU interface?
+            is_cpu_running = true;
             CPU().Run(/*cycles_remaining*/);
+            is_cpu_running = false;
         } else {
             // If idle, just advance time by the requested cycle count
             cycles_remaining = Cycles(0);
@@ -199,14 +204,15 @@ Ticks ThreadManager::RunSegment(::Ticks segment_length) {
 }
 
 ThreadManager::ThreadManager(Core::Timing& root_, u32 core_id_, std::unique_ptr<ARM_Interface> cpu_)
-    : root(root_), core_id(core_id_), cpu(std::move(cpu_)) {}
+    : root(root_), memory(Core::System::GetInstance().Memory()), core_id(core_id_),
+      cpu(std::move(cpu_)) {}
 
 ThreadManager::~ThreadManager() = default;
 
 bool ThreadManager::Reschedule() {
 
     // The 3ds uses cooperative multithreading. Never interrupt a thread that's already running.
-    if (thread->status == Thread::Status::Running) {
+    if (thread && thread->status == Thread::Status::Running) {
         return true;
     }
 
@@ -214,20 +220,43 @@ bool ThreadManager::Reschedule() {
     std::sort(threads.begin(), threads.end());
 
     // If there are no threads ready, end the block
-    auto next_thread = threads.begin();
-    if (next_thread == threads.end() || (*next_thread)->status != Thread::Status::Ready) {
+    if (threads.empty() || threads.front()->status != Thread::Status::Ready) {
         EndBlock();
         return false;
     }
+    auto next_thread = threads.front();
 
     // If there was no change, we're good!
-    if (*next_thread == thread) {
+    if (next_thread == thread) {
+        thread->status = Thread::Status::Running;
         return true;
     }
 
     // Now that we've found us a thread to run, we can change the CPU context inline
-    CPU().SaveContext(thread->context);
-    thread = *next_thread;
+    if (thread) {
+        CPU().SaveContext(thread->context);
+        thread->status = Thread::Status::Ready;
+        // Processes (i.e. page tables) can't be swapped while the CPU is running
+        // If it needs to be changed, exit the block and allow the next segment iteration to
+        // reschedule again
+        if (&thread->Process() != &next_thread->Process()) {
+            if (is_cpu_running) {
+                thread = nullptr;
+                EndBlock();
+                return false;
+            } else {
+                auto& pt = next_thread->Process().vm_manager.page_table;
+                CPU().SetPageTable(pt);
+                memory.SetCurrentPageTable(pt);
+            }
+        }
+    } else {
+        auto& pt = next_thread->Process().vm_manager.page_table;
+        CPU().SetPageTable(pt);
+        memory.SetCurrentPageTable(pt);
+    }
+    thread = next_thread;
+    thread->status = Thread::Status::Running;
     CPU().LoadContext(thread->context);
     cpu->SetCP15Register(CP15_THREAD_URO, thread->tls_address);
     return true;
@@ -263,8 +292,8 @@ ResultCode ThreadManager::WaitOne(ObjectPtr object, std::chrono::nanoseconds tim
     ASSERT(thread->status == Thread::Status::Running);
 
     // Check if we can sync immediately
-    if (!object->ShouldWait(thread)) {
-        object->Acquire(thread);
+    if (!object->ShouldWait(thread.get())) {
+        object->Acquire(thread.get());
         return thread->SyncOutput(RESULT_SUCCESS);
     }
 
@@ -277,7 +306,7 @@ ResultCode ThreadManager::WaitOne(ObjectPtr object, std::chrono::nanoseconds tim
 
     // Wait on the object
     thread->waiting_on = {object};
-    object->AddWaitingThread(Kernel::SharedFrom(thread));
+    object->AddWaitingThread(thread);
     thread->status = Thread::Status::WaitSyncAll;
     Reschedule();
     return thread->SyncOutput(RESULT_SUCCESS);
@@ -289,17 +318,18 @@ ResultCode ThreadManager::WaitAny(std::vector<ObjectPtr> objects, std::chrono::n
     thread->sync_output = index;
 
     // Check if we can sync immediately
-    auto active_obj = std::find_if(objects.begin(), objects.end(),
-                                   [this](const auto& obj) { return !obj->ShouldWait(thread); });
+    auto active_obj = std::find_if(objects.begin(), objects.end(), [this](const auto& obj) {
+        return !obj->ShouldWait(thread.get());
+    });
     if (active_obj != objects.end()) {
-        (*active_obj)->Acquire(thread);
+        (*active_obj)->Acquire(thread.get());
         return thread->SyncOutput(RESULT_SUCCESS, static_cast<u32>(active_obj - objects.begin()));
     }
 
     // Schedule the timeout
     if (timeout.count() == 0) {
         auto inactive_obj = std::find_if(objects.begin(), objects.end(), [this](const auto& obj) {
-            return obj->ShouldWait(thread);
+            return obj->ShouldWait(thread.get());
         });
         if (inactive_obj != objects.end()) {
             return thread->SyncOutput(RESULT_TIMEOUT);
@@ -310,7 +340,7 @@ ResultCode ThreadManager::WaitAny(std::vector<ObjectPtr> objects, std::chrono::n
 
     thread->waiting_on = objects;
     for (auto obj : objects) {
-        obj->AddWaitingThread(Kernel::SharedFrom(thread));
+        obj->AddWaitingThread(thread);
     }
     thread->status = Thread::Status::WaitSyncAny;
     Reschedule();
@@ -322,22 +352,23 @@ ResultCode ThreadManager::WaitIPC(std::vector<ObjectPtr> objects, s32* index) {
     thread->sync_output = index;
 
     // Check if we can sync immediately
-    auto active_obj = std::find_if(objects.begin(), objects.end(),
-                                   [this](const auto& obj) { return !obj->ShouldWait(thread); });
+    auto active_obj = std::find_if(objects.begin(), objects.end(), [this](const auto& obj) {
+        return !obj->ShouldWait(thread.get());
+    });
     if (active_obj != objects.end()) {
         s32 idx = static_cast<s32>(active_obj - objects.begin());
-        (*active_obj)->Acquire(thread);
+        (*active_obj)->Acquire(thread.get());
 
         if ((*active_obj)->GetHandleType() != HandleType::ServerSession) {
             return thread->SyncOutput(RESULT_SUCCESS, idx);
         }
         auto server_session = dynamic_cast<ServerSession*>(active_obj->get());
-        return thread->SyncOutput(server_session->ReceiveIPCRequest(thread), idx);
+        return thread->SyncOutput(server_session->ReceiveIPCRequest(thread.get()), idx);
     }
 
     thread->waiting_on = objects;
     for (auto obj : objects) {
-        obj->AddWaitingThread(Kernel::SharedFrom(thread));
+        obj->AddWaitingThread(thread);
     }
     thread->status = Thread::Status::WaitIPC;
     Reschedule();
@@ -349,11 +380,12 @@ ResultCode ThreadManager::WaitAll(std::vector<ObjectPtr> objects,
     ASSERT(thread->status == Thread::Status::Running);
 
     // Check if we can sync immediately
-    auto inactive_obj = std::find_if(objects.begin(), objects.end(),
-                                     [this](const auto& obj) { return obj->ShouldWait(thread); });
+    auto inactive_obj = std::find_if(objects.begin(), objects.end(), [this](const auto& obj) {
+        return obj->ShouldWait(thread.get());
+    });
     if (inactive_obj == objects.end()) {
         for (auto obj : objects) {
-            obj->Acquire(thread);
+            obj->Acquire(thread.get());
         }
         return RESULT_SUCCESS;
     }
@@ -361,7 +393,7 @@ ResultCode ThreadManager::WaitAll(std::vector<ObjectPtr> objects,
     // Schedule the timeout
     if (timeout.count() == 0) {
         auto active_obj = std::find_if(objects.begin(), objects.end(), [this](const auto& obj) {
-            return !obj->ShouldWait(thread);
+            return !obj->ShouldWait(thread.get());
         });
         if (active_obj == objects.end()) {
             return RESULT_TIMEOUT;
@@ -373,7 +405,7 @@ ResultCode ThreadManager::WaitAll(std::vector<ObjectPtr> objects,
     // Wait on the objects
     thread->waiting_on = objects;
     for (auto obj : objects) {
-        obj->AddWaitingThread(Kernel::SharedFrom(thread));
+        obj->AddWaitingThread(thread);
     }
     thread->status = Thread::Status::WaitSyncAll;
     Reschedule();
@@ -442,8 +474,9 @@ void Thread::Stop() {
         }
         held_mutexes.clear();
 
-        core.threads.erase(std::remove(core.threads.begin(), core.threads.end(), this),
-                           core.threads.end());
+        core.threads.erase(
+            std::remove(core.threads.begin(), core.threads.end(), shared_from_this()),
+            core.threads.end());
 
         // Mark the TLS slot in the thread's page as free.
         u32 tls_page = (tls_address - Memory::TLS_AREA_VADDR) / Memory::PAGE_SIZE;

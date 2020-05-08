@@ -75,7 +75,7 @@ Handler::Handler(Core::Timing& timing) : timing(timing) {
     // update_time_event = timing.RegisterEvent("SharedPage::UpdateTimeCallback",
     //                                          std::bind(&Handler::UpdateTimeCallback, this, _1,
     //                                          _2));
-    timing.ScheduleEvent(this, Ticks(0));
+    Execute(timing, 0, Ticks(0));
 
     float slidestate = Settings::values.factor_3d / 100.0f;
     shared_page.sliderstate_3d = static_cast<float_le>(slidestate);
@@ -115,7 +115,7 @@ void Handler::Execute(Core::Timing& parent, u64 userdata, Ticks cycles_late) {
     ++shared_page.date_time_counter;
 
     // system time is updated hourly
-    timing.ScheduleEvent(this, Ticks(std::chrono::hours(1)) - cycles_late);
+    timing.ScheduleEvent(this, std::chrono::hours(1) - cycles_late);
 }
 
 void Handler::SetMacAddress(const MacAddress& addr) {

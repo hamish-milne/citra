@@ -741,7 +741,7 @@ void CachedSurface::DumpTexture(GLuint target_tex, u64 tex_hash) {
     auto& custom_tex_cache = Core::System::GetInstance().CustomTexCache();
     std::string dump_path =
         fmt::format("{}textures/{:016X}/", FileUtil::GetUserPath(FileUtil::UserPath::DumpDir),
-                    Core::System::GetInstance().Kernel().GetCurrentProcess()->codeset->program_id);
+                    Core::System::GetInstance().GetAppProcess().codeset->program_id);
     if (!FileUtil::CreateFullPath(dump_path)) {
         LOG_ERROR(Render, "Unable to create {}", dump_path);
         return;

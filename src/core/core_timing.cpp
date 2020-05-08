@@ -77,11 +77,7 @@ void Timing::RunSlice() {
     // the max slice time is fairly arbitrary, as it represents the largest duration by which cores
     // can be out of sync. The real maximum value without sacrificing accuracy will depend on
     // software.
-    current_slice_length = Ticks(BASE_CLOCK_RATE_ARM11 / 234);
-    // Only run the slice til the next event:
-    if (TimeToNextEvent() < current_slice_length) {
-        current_slice_length = TimeToNextEvent();
-    }
+    current_slice_length = std::min(TimeToNextEvent(), Ticks(BASE_CLOCK_RATE_ARM11 / 234));
     // No cores have run yet, so it's OK to schedule any events we want during this segment
     max_core_time = Time_LB();
     for (auto& core : cores) {

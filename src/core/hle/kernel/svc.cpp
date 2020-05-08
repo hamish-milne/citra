@@ -285,7 +285,7 @@ void SVC::ExitProcess() {
         if (&thread->Process() != current_process.get())
             continue;
 
-        if (thread == kernel.GetCurrentThreadManager().GetCurrentThread())
+        if (thread.get() == kernel.GetCurrentThreadManager().GetCurrentThread())
             continue;
 
         // TODO(Subv): When are the other running/ready threads terminated?

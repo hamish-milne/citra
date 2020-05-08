@@ -35,6 +35,10 @@
 
 class WaitTreeThread;
 
+namespace Memory {
+class MemorySystem;
+}
+
 namespace Kernel {
 
 using ObjectPtr = std::shared_ptr<WaitObject>;
@@ -164,11 +168,11 @@ private:
     Status status = Status::Created;
     u32 nominal_priority = Priority::Default;
     std::optional<u32> real_priority{};
-    std::shared_ptr<Kernel::AddressArbiter> arbiter;
-    VAddr wait_address;
-    std::shared_ptr<HLERequestContext> hle_context;
-    std::shared_ptr<IPCCallback> hle_callback;
-    s32* sync_output;
+    std::shared_ptr<Kernel::AddressArbiter> arbiter{};
+    VAddr wait_address{};
+    std::shared_ptr<HLERequestContext> hle_context{};
+    std::shared_ptr<IPCCallback> hle_callback{};
+    s32* sync_output{};
 
     ResultCode SyncOutput(ResultCode result, std::optional<u32> output = std::nullopt);
 
@@ -231,17 +235,17 @@ public:
     void Sleep();
     void Stop();
 
-    Kernel::Process& Process() {
-        return *thread->process;
+    Kernel::Process* Process() {
+        return thread ? thread->process.get() : nullptr;
     }
-    const Kernel::Process& Process() const {
-        return *thread->process;
+    const Kernel::Process* Process() const {
+        return thread ? thread->process.get() : nullptr;
     }
     Kernel::Thread* GetCurrentThread() {
-        return thread;
+        return thread.get();
     }
     const Kernel::Thread* GetCurrentThread() const {
-        return thread;
+        return thread.get();
     }
     ARM_Interface& CPU() {
         return *cpu;
@@ -263,7 +267,7 @@ public:
         cycles_remaining = cycles_remaining - count;
     }
 
-    const std::vector<Kernel::Thread*>& GetThreadList() {
+    const std::vector<std::shared_ptr<Kernel::Thread>>& GetThreadList() {
         return threads;
     }
 
@@ -271,14 +275,16 @@ private:
     // Constant
     u32 core_id;
     Core::Timing& root;
+    Memory::MemorySystem& memory;
     std::unique_ptr<ARM_Interface> cpu;
 
     // Mutable
-    Kernel::Thread* thread;
-    std::vector<Kernel::Thread*> threads;
-    Cycles cycles_remaining;
-    Cycles delay_cycles;
-    ::Ticks segment_end;
+    std::shared_ptr<Kernel::Thread> thread{};
+    std::vector<std::shared_ptr<Kernel::Thread>> threads{};
+    Cycles cycles_remaining{};
+    Cycles delay_cycles{};
+    ::Ticks segment_end{};
+    bool is_cpu_running{};
 
     bool Reschedule();
     Ticks RunSegment(Ticks segment_length);

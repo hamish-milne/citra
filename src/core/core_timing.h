@@ -317,12 +317,15 @@ private:
         return cores[current_core_id];
     }
 
-    u8 current_core_id;
+    // Constant
     std::vector<Kernel::ThreadManager> cores;
     class EventQueue;
     std::unique_ptr<EventQueue> events;
-    Ticks current_slice_length{0};
-    Ticks max_core_time{0};
+
+    // Mutable
+    u8 current_core_id{};
+    Ticks current_slice_length{};
+    Ticks max_core_time{};
     double scale_factor = 1.0;
 
     friend class Kernel::ThreadManager;

@@ -275,9 +275,7 @@ System::ResultStatus System::Load(Frontend::EmuWindow& emu_window, const std::st
     }
 
     telemetry_session->AddInitialInfo(*app_loader);
-    std::shared_ptr<Kernel::Process> process;
-    const Loader::ResultStatus load_result{app_loader->Load(process)};
-    // kernel->SetCurrentProcess(process);
+    const Loader::ResultStatus load_result{app_loader->Load(app_process)};
     if (Loader::ResultStatus::Success != load_result) {
         LOG_CRITICAL(Core, "Failed to load ROM (Error {})!", static_cast<u32>(load_result));
         System::Shutdown();
@@ -301,7 +299,7 @@ System::ResultStatus System::Load(Frontend::EmuWindow& emu_window, const std::st
     custom_tex_cache = std::make_unique<Core::CustomTexCache>();
 
     if (Settings::values.custom_textures) {
-        const u64 program_id = Kernel().GetCurrentProcess()->codeset->program_id;
+        const u64 program_id = GetAppProcess().codeset->program_id;
         FileUtil::CreateFullPath(fmt::format(
             "{}textures/{:016X}/", FileUtil::GetUserPath(FileUtil::UserPath::LoadDir), program_id));
         custom_tex_cache->FindCustomTextures(program_id);
@@ -547,6 +545,7 @@ void System::Shutdown(bool is_deserializing) {
         cheat_engine.reset();
         app_loader.reset();
     }
+    app_process.reset();
     telemetry_session.reset();
     rpc_server.reset();
     archive_manager.reset();

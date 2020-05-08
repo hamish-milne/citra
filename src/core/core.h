@@ -279,6 +279,10 @@ public:
         return *app_loader;
     }
 
+    Kernel::Process& GetAppProcess() const {
+        return *app_process;
+    }
+
     /// Frontend Applets
 
     void RegisterMiiSelector(std::shared_ptr<Frontend::MiiSelector> mii_selector);
@@ -321,6 +325,7 @@ private:
 
     /// AppLoader used to load the current executing application
     std::unique_ptr<Loader::AppLoader> app_loader;
+    std::shared_ptr<Kernel::Process> app_process;
 
     /// ARM11 CPU core
     // std::vector<std::shared_ptr<ARM_Interface>> cpu_cores;

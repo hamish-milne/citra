@@ -84,8 +84,8 @@ void CheatEngine::UpdateCheat(int index, const std::shared_ptr<CheatBase>& new_c
 
 void CheatEngine::SaveCheatFile() const {
     const std::string cheat_dir = FileUtil::GetUserPath(FileUtil::UserPath::CheatsDir);
-    const std::string filepath = fmt::format(
-        "{}{:016X}.txt", cheat_dir, system.Kernel().GetCurrentProcess()->codeset->program_id);
+    const std::string filepath =
+        fmt::format("{}{:016X}.txt", cheat_dir, system.GetAppProcess().codeset->program_id);
 
     if (!FileUtil::IsDirectory(cheat_dir)) {
         FileUtil::CreateDir(cheat_dir);
@@ -104,8 +104,8 @@ void CheatEngine::SaveCheatFile() const {
 
 void CheatEngine::LoadCheatFile() {
     const std::string cheat_dir = FileUtil::GetUserPath(FileUtil::UserPath::CheatsDir);
-    const std::string filepath = fmt::format(
-        "{}{:016X}.txt", cheat_dir, system.Kernel().GetCurrentProcess()->codeset->program_id);
+    const std::string filepath =
+        fmt::format("{}{:016X}.txt", cheat_dir, system.GetAppProcess().codeset->program_id);
 
     if (!FileUtil::IsDirectory(cheat_dir)) {
         FileUtil::CreateDir(cheat_dir);
