@@ -17,32 +17,32 @@ class Timing;
 
 namespace Kernel {
 
-class TimerManager {
-public:
-    TimerManager(Core::Timing& timing);
+// class TimerManager {
+// public:
+//     TimerManager(Core::Timing& timing);
 
-private:
-    /// The timer callback event, called when a timer is fired
-    void TimerCallback(u64 callback_id, s64 cycles_late);
+// private:
+//     /// The timer callback event, called when a timer is fired
+//     void TimerCallback(u64 callback_id, s64 cycles_late);
 
-    Core::Timing& timing;
+//     Core::Timing& timing;
 
-    /// The event type of the generic timer callback event
-    Core::TimingEventType* timer_callback_event_type = nullptr;
+//     /// The event type of the generic timer callback event
+//     Core::Event* timer_callback_event_type = nullptr;
 
-    u64 next_timer_callback_id = 0;
-    std::unordered_map<u64, Timer*> timer_callback_table;
+//     u64 next_timer_callback_id = 0;
+//     std::unordered_map<u64, Timer*> timer_callback_table;
 
-    friend class Timer;
-    friend class KernelSystem;
+//     friend class Timer;
+//     friend class KernelSystem;
 
-    friend class boost::serialization::access;
-    template <class Archive>
-    void serialize(Archive& ar, const unsigned int file_version) {
-        ar& next_timer_callback_id;
-        ar& timer_callback_table;
-    }
-};
+//     friend class boost::serialization::access;
+//     template <class Archive>
+//     void serialize(Archive& ar, const unsigned int file_version) {
+//         ar& next_timer_callback_id;
+//         ar& timer_callback_table;
+//     }
+// };
 
 class Timer final : public WaitObject {
 public:
@@ -66,11 +66,11 @@ public:
     }
 
     u64 GetInitialDelay() const {
-        return initial_delay;
+        return s64(initial_delay);
     }
 
     u64 GetIntervalDelay() const {
-        return interval_delay;
+        return s64(interval_delay.value_or(0));
     }
 
     bool ShouldWait(const Thread* thread) const override;
@@ -83,7 +83,7 @@ public:
      * @param initial Delay until the timer is first fired
      * @param interval Delay until the timer is fired after the first time
      */
-    void Set(s64 initial, s64 interval);
+    void Set(Ticks initial, std::optional<Ticks> interval);
 
     void Cancel();
     void Clear();
@@ -94,22 +94,25 @@ public:
      * This method should not be called from outside the timer callback handler,
      * lest multiple callback events get scheduled.
      */
-    void Signal(s64 cycles_late);
+    void Signal(Ticks cycles_late);
 
 private:
+    class Callback;
+    std::unique_ptr<Callback> timer_event;
+
     ResetType reset_type; ///< The ResetType of this timer
 
-    u64 initial_delay;  ///< The delay until the timer fires for the first time
-    u64 interval_delay; ///< The delay until the timer fires after the first time
+    Ticks initial_delay;                 ///< The delay until the timer fires for the first time
+    std::optional<Ticks> interval_delay; ///< The delay until the timer fires after the first time
 
     bool signaled;    ///< Whether the timer has been signaled or not
     std::string name; ///< Name of timer (optional)
 
     /// ID used as userdata to reference this object when inserting into the CoreTiming queue.
-    u64 callback_id;
+    // u64 callback_id;
 
     KernelSystem& kernel;
-    TimerManager& timer_manager;
+    // TimerManager& timer_manager;
 
     friend class KernelSystem;
 

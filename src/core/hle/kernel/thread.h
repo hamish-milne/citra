@@ -545,16 +545,16 @@ private:
 //     void serialize(Archive& ar, const unsigned int file_version);
 // };
 
-// /**
-//  * Sets up the primary application thread
-//  * @param kernel The kernel instance on which the thread is created
-//  * @param entry_point The address at which the thread should start execution
-//  * @param priority The priority to give the main thread
-//  * @param owner_process The parent process for the main thread
-//  * @return A shared pointer to the main thread
-//  */
-// std::shared_ptr<Thread> SetupMainThread(KernelSystem& kernel, u32 entry_point, u32 priority,
-//                                         std::shared_ptr<Process> owner_process);
+/**
+ * Sets up the primary application thread
+ * @param kernel The kernel instance on which the thread is created
+ * @param entry_point The address at which the thread should start execution
+ * @param priority The priority to give the main thread
+ * @param owner_process The parent process for the main thread
+ * @return A shared pointer to the main thread
+ */
+std::shared_ptr<Thread> SetupMainThread(KernelSystem& kernel, u32 entry_point, u32 priority,
+                                        std::shared_ptr<Process> owner_process);
 
 } // namespace Kernel
 

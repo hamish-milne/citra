@@ -1213,7 +1213,8 @@ ResultCode SVC::SetTimer(Handle handle, s64 initial, s64 interval) {
     if (timer == nullptr)
         return ERR_INVALID_HANDLE;
 
-    timer->Set(initial, interval);
+    timer->Set(nanoseconds(initial),
+               interval > 0 ? std::optional<Ticks>(nanoseconds(interval)) : std::nullopt);
 
     return RESULT_SUCCESS;
 }

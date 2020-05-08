@@ -68,7 +68,7 @@ private:
     void serialize(Archive& ar, const unsigned int file_version) {
         ar& boost::serialization::base_object<WaitObject>(*this);
         ar& lock_count;
-        ar& priority;
+        // ar& priority;
         ar& name;
         ar& holding_thread;
     }

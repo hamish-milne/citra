@@ -167,7 +167,7 @@ static Kernel::Thread* FindThreadById(int id) {
             Core::System::GetInstance().Kernel().GetThreadManager(i).GetThreadList();
         for (auto& thread : threads) {
             if (thread->GetThreadId() == static_cast<u32>(id)) {
-                return thread.get();
+                return thread;
             }
         }
     }

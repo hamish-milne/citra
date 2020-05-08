@@ -33,7 +33,7 @@ KernelSystem::KernelSystem(Memory::MemorySystem& memory, Core::Timing& timing, u
     // for (u32 core_id = 0; core_id < num_cores; ++core_id) {
     //     thread_managers.push_back(std::make_unique<ThreadManager>(*this, core_id));
     // }
-    timer_manager = std::make_unique<TimerManager>(timing);
+    // timer_manager = std::make_unique<TimerManager>(timing);
     ipc_recorder = std::make_unique<IPCDebugger::Recorder>();
     // stored_processes.assign(num_cores, nullptr);
 
@@ -118,13 +118,13 @@ const ThreadManager& KernelSystem::GetCurrentThreadManager() const {
     return timing.CurrentCore();
 }
 
-TimerManager& KernelSystem::GetTimerManager() {
-    return *timer_manager;
-}
+// TimerManager& KernelSystem::GetTimerManager() {
+//     return *timer_manager;
+// }
 
-const TimerManager& KernelSystem::GetTimerManager() const {
-    return *timer_manager;
-}
+// const TimerManager& KernelSystem::GetTimerManager() const {
+//     return *timer_manager;
+// }
 
 SharedPage::Handler& KernelSystem::GetSharedPageHandler() {
     return *shared_page_handler;
@@ -162,7 +162,7 @@ void KernelSystem::serialize(Archive& ar, const unsigned int file_version) {
     // NB: subsystem references and prepare_reschedule_callback are constant
     ar&* resource_limits.get();
     ar& next_object_id;
-    ar&* timer_manager.get();
+    // ar&* timer_manager.get();
     ar& next_process_id;
     ar& process_list;
     // ar& current_process;

@@ -225,8 +225,8 @@ public:
     ThreadManager& GetCurrentThreadManager();
     const ThreadManager& GetCurrentThreadManager() const;
 
-    TimerManager& GetTimerManager();
-    const TimerManager& GetTimerManager() const;
+    // TimerManager& GetTimerManager();
+    // const TimerManager& GetTimerManager() const;
 
     void MapSharedPages(VMManager& address_space);
 
@@ -277,7 +277,7 @@ private:
     // timer manager.
     // TODO (wwylele): refactor the cleanup sequence to make this less complicated and sensitive.
 
-    std::unique_ptr<TimerManager> timer_manager;
+    // std::unique_ptr<TimerManager> timer_manager;
 
     // TODO(Subv): Start the process ids from 10 for now, as lower PIDs are
     // reserved for low-level services
