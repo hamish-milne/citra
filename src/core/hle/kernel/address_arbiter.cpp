@@ -26,6 +26,14 @@ void AddressArbiter::WaitThread(ThreadManager& core, VAddr wait_address,
     waiting_threads.emplace_back(core.GetCurrentThread());
 }
 
+void AddressArbiter::RemoveWaitingThread(Thread* thread) {
+    auto itr = std::find_if(waiting_threads.begin(), waiting_threads.end(),
+                            [=](auto& t) { return t.get() == thread; });
+    if (itr != waiting_threads.end()) {
+        waiting_threads.erase(itr);
+    }
+}
+
 void AddressArbiter::ResumeAllThreads(VAddr address) {
     // Determine which threads are waiting on this address, those should be woken up.
     auto itr = std::stable_partition(

@@ -287,4 +287,4 @@ void MappedBuffer::Write(const void* src_buffer, std::size_t offset, std::size_t
 
 } // namespace Kernel
 
-SERIALIZE_EXPORT_IMPL(Kernel::HLERequestContext::ThreadCallback)
+// SERIALIZE_EXPORT_IMPL(Kernel::HLERequestContext::ThreadCallback)

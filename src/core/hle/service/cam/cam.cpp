@@ -98,87 +98,112 @@ void Module::PortConfig::Clear() {
     transfer_bytes = 256;
 }
 
-void Module::CompletionEventCallBack(u64 port_id, s64) {
-    PortConfig& port = ports[port_id];
-    const CameraConfig& camera = cameras[port.camera_id];
-    const auto buffer = port.capture_result.get();
+class Module::CompletionEvent : public Core::Event {
+    Module& parent;
 
-    if (port.is_trimming) {
-        u32 trim_width;
-        u32 trim_height;
-        const int original_width = camera.contexts[camera.current_context].resolution.width;
-        const int original_height = camera.contexts[camera.current_context].resolution.height;
-        if (port.x1 <= port.x0 || port.y1 <= port.y0 || port.x1 > original_width ||
-            port.y1 > original_height) {
-            LOG_ERROR(Service_CAM, "Invalid trimming coordinates x0={}, y0={}, x1={}, y1={}",
-                      port.x0, port.y0, port.x1, port.y1);
-            trim_width = 0;
-            trim_height = 0;
-        } else {
-            trim_width = port.x1 - port.x0;
-            trim_height = port.y1 - port.y0;
-        }
+public:
+    explicit CompletionEvent(Module& parent_) : parent(parent_) {}
 
-        u32 trim_size = (port.x1 - port.x0) * (port.y1 - port.y0) * 2;
-        if (port.dest_size != trim_size) {
-            LOG_ERROR(Service_CAM, "The destination size ({}) doesn't match the source ({})!",
-                      port.dest_size, trim_size);
-        }
-
-        const u32 src_offset = port.y0 * original_width + port.x0;
-        const u16* src_ptr = buffer.data() + src_offset;
-        // Note: src_size_left is int because it can be negative if the buffer size doesn't match.
-        int src_size_left = static_cast<int>((buffer.size() - src_offset) * sizeof(u16));
-        VAddr dest_ptr = port.dest;
-        // Note: dest_size_left and line_bytes are int to match the type of src_size_left.
-        int dest_size_left = static_cast<int>(port.dest_size);
-        const int line_bytes = static_cast<int>(trim_width * sizeof(u16));
-
-        for (u32 y = 0; y < trim_height; ++y) {
-            int copy_length = std::min({line_bytes, dest_size_left, src_size_left});
-            if (copy_length <= 0) {
-                break;
-            }
-            system.Memory().WriteBlock(*port.dest_process, dest_ptr, src_ptr, copy_length);
-            dest_ptr += copy_length;
-            dest_size_left -= copy_length;
-            src_ptr += original_width;
-            src_size_left -= original_width * sizeof(u16);
-        }
-    } else {
-        std::size_t buffer_size = buffer.size() * sizeof(u16);
-        if (port.dest_size != buffer_size) {
-            LOG_ERROR(Service_CAM, "The destination size ({}) doesn't match the source ({})!",
-                      port.dest_size, buffer_size);
-        }
-        system.Memory().WriteBlock(*port.dest_process, port.dest, buffer.data(),
-                                   std::min<std::size_t>(port.dest_size, buffer_size));
+    const std::string& Name() const override {
+        static const std::string name = "CAM::CompletionEventCallBack";
+        return name;
     }
 
-    port.is_receiving = false;
-    port.completion_event->Signal();
-}
+    void Execute(Core::Timing& timing, u64 port_id, Ticks cycles_late) override {
+        PortConfig& port = parent.ports[port_id];
+        const CameraConfig& camera = parent.cameras[port.camera_id];
+        const auto buffer = port.capture_result.get();
+
+        if (port.is_trimming) {
+            u32 trim_width;
+            u32 trim_height;
+            const int original_width = camera.contexts[camera.current_context].resolution.width;
+            const int original_height = camera.contexts[camera.current_context].resolution.height;
+            if (port.x1 <= port.x0 || port.y1 <= port.y0 || port.x1 > original_width ||
+                port.y1 > original_height) {
+                LOG_ERROR(Service_CAM, "Invalid trimming coordinates x0={}, y0={}, x1={}, y1={}",
+                          port.x0, port.y0, port.x1, port.y1);
+                trim_width = 0;
+                trim_height = 0;
+            } else {
+                trim_width = port.x1 - port.x0;
+                trim_height = port.y1 - port.y0;
+            }
+
+            u32 trim_size = (port.x1 - port.x0) * (port.y1 - port.y0) * 2;
+            if (port.dest_size != trim_size) {
+                LOG_ERROR(Service_CAM, "The destination size ({}) doesn't match the source ({})!",
+                          port.dest_size, trim_size);
+            }
+
+            const u32 src_offset = port.y0 * original_width + port.x0;
+            const u16* src_ptr = buffer.data() + src_offset;
+            // Note: src_size_left is int because it can be negative if the buffer size doesn't
+            // match.
+            int src_size_left = static_cast<int>((buffer.size() - src_offset) * sizeof(u16));
+            VAddr dest_ptr = port.dest;
+            // Note: dest_size_left and line_bytes are int to match the type of src_size_left.
+            int dest_size_left = static_cast<int>(port.dest_size);
+            const int line_bytes = static_cast<int>(trim_width * sizeof(u16));
+
+            for (u32 y = 0; y < trim_height; ++y) {
+                int copy_length = std::min({line_bytes, dest_size_left, src_size_left});
+                if (copy_length <= 0) {
+                    break;
+                }
+                parent.system.Memory().WriteBlock(*port.dest_process, dest_ptr, src_ptr,
+                                                  copy_length);
+                dest_ptr += copy_length;
+                dest_size_left -= copy_length;
+                src_ptr += original_width;
+                src_size_left -= original_width * sizeof(u16);
+            }
+        } else {
+            std::size_t buffer_size = buffer.size() * sizeof(u16);
+            if (port.dest_size != buffer_size) {
+                LOG_ERROR(Service_CAM, "The destination size ({}) doesn't match the source ({})!",
+                          port.dest_size, buffer_size);
+            }
+            parent.system.Memory().WriteBlock(*port.dest_process, port.dest, buffer.data(),
+                                              std::min<std::size_t>(port.dest_size, buffer_size));
+        }
+
+        port.is_receiving = false;
+        port.completion_event->Signal();
+    }
+};
 
 static constexpr std::size_t MaxVsyncTimings = 5;
 
-void Module::VsyncInterruptEventCallBack(u64 port_id, s64 cycles_late) {
-    PortConfig& port = ports[port_id];
-    const CameraConfig& camera = cameras[port.camera_id];
+class Module::VsyncInterruptEvent : public Core::Event {
+    Module& parent;
 
-    if (!port.is_active) {
-        return;
+public:
+    explicit VsyncInterruptEvent(Module& parent_) : parent(parent_) {}
+
+    const std::string& Name() const {
+        static const std::string name = "CAM::VsyncInterruptEventCallBack";
+        return name;
     }
 
-    port.vsync_timings.emplace_front(system.CoreTiming().GetGlobalTimeUs().count());
-    if (port.vsync_timings.size() > MaxVsyncTimings) {
-        port.vsync_timings.pop_back();
-    }
-    port.vsync_interrupt_event->Signal();
+    void Execute(Core::Timing& timing, u64 port_id, Ticks cycles_late) override {
+        PortConfig& port = parent.ports[port_id];
+        const CameraConfig& camera = parent.cameras[port.camera_id];
 
-    system.CoreTiming().ScheduleEvent(
-        msToCycles(LATENCY_BY_FRAME_RATE[static_cast<int>(camera.frame_rate)]) - cycles_late,
-        vsync_interrupt_event_callback, port_id);
-}
+        if (!port.is_active) {
+            return;
+        }
+
+        port.vsync_timings.emplace_front(timing.Time_LB());
+        if (port.vsync_timings.size() > MaxVsyncTimings) {
+            port.vsync_timings.pop_back();
+        }
+        port.vsync_interrupt_event->Signal();
+
+        const milliseconds latency{LATENCY_BY_FRAME_RATE[static_cast<int>(camera.frame_rate)]};
+        timing.ScheduleEvent(this, latency - cycles_late, port_id);
+    }
+};
 
 void Module::StartReceiving(int port_id) {
     PortConfig& port = ports[port_id];
@@ -198,16 +223,16 @@ void Module::StartReceiving(int port_id) {
 
     // schedules a completion event according to the frame rate. The event will block on the
     // capture task if it is not finished within the expected time
-    system.CoreTiming().ScheduleEvent(
-        msToCycles(LATENCY_BY_FRAME_RATE[static_cast<int>(camera.frame_rate)]),
-        completion_event_callback, port_id);
+    const auto latency = LATENCY_BY_FRAME_RATE[static_cast<int>(camera.frame_rate)];
+    system.CoreTiming().ScheduleEvent(completion_event.get(), Ticks(milliseconds(latency)),
+                                      port_id);
 }
 
 void Module::CancelReceiving(int port_id) {
     if (!ports[port_id].is_receiving)
         return;
     LOG_WARNING(Service_CAM, "tries to cancel an ongoing receiving process.");
-    system.CoreTiming().UnscheduleEvent(completion_event_callback, port_id);
+    system.CoreTiming().UnscheduleEvent(completion_event.get(), port_id);
     ports[port_id].capture_result.wait();
     ports[port_id].is_receiving = false;
 }
@@ -220,9 +245,9 @@ void Module::ActivatePort(int port_id, int camera_id) {
     }
     ports[port_id].is_active = true;
     ports[port_id].camera_id = camera_id;
-    system.CoreTiming().ScheduleEvent(
-        msToCycles(LATENCY_BY_FRAME_RATE[static_cast<int>(cameras[camera_id].frame_rate)]),
-        vsync_interrupt_event_callback, port_id);
+    const auto latency = LATENCY_BY_FRAME_RATE[static_cast<int>(cameras[camera_id].frame_rate)];
+    system.CoreTiming().ScheduleEvent(vsync_interrupt_event.get(), Ticks(milliseconds(latency)),
+                                      port_id);
 }
 
 template <int max_index>
@@ -681,7 +706,7 @@ void Module::Interface::Activate(Kernel::HLERequestContext& ctx) {
                     cam->ports[i].is_busy = false;
                 }
                 cam->ports[i].is_active = false;
-                cam->system.CoreTiming().UnscheduleEvent(cam->vsync_interrupt_event_callback, i);
+                cam->system.CoreTiming().UnscheduleEvent(cam->vsync_interrupt_event.get(), i);
             }
             rb.Push(RESULT_SUCCESS);
         } else if (camera_select[0] && camera_select[1]) {
@@ -929,7 +954,9 @@ void Module::Interface::GetLatestVsyncTiming(Kernel::HLERequestContext& ctx) {
     const std::size_t port_id = port_select.m_val == 1 ? 0 : 1;
     std::vector<u8> out(count * sizeof(s64_le));
     std::size_t offset = 0;
-    for (const s64_le timing : cam->ports[port_id].vsync_timings) {
+    for (const auto timing_d : cam->ports[port_id].vsync_timings) {
+        const s64_le timing =
+            std::chrono::duration_cast<std::chrono::microseconds>(timing_d).count();
         std::memcpy(out.data() + offset * sizeof(timing), &timing, sizeof(timing));
         offset++;
         if (offset >= count) {
@@ -1098,7 +1125,9 @@ void Module::Interface::DriverFinalize(Kernel::HLERequestContext& ctx) {
     LOG_DEBUG(Service_CAM, "called");
 }
 
-Module::Module(Core::System& system) : system(system) {
+Module::Module(Core::System& system)
+    : system(system), vsync_interrupt_event(new VsyncInterruptEvent(*this)),
+      completion_event(new CompletionEvent(*this)) {
     using namespace Kernel;
     for (PortConfig& port : ports) {
         port.completion_event =
@@ -1108,13 +1137,14 @@ Module::Module(Core::System& system) : system(system) {
         port.vsync_interrupt_event =
             system.Kernel().CreateEvent(ResetType::OneShot, "CAM::vsync_interrupt_event");
     }
-    completion_event_callback = system.CoreTiming().RegisterEvent(
-        "CAM::CompletionEventCallBack",
-        [this](u64 userdata, s64 cycles_late) { CompletionEventCallBack(userdata, cycles_late); });
-    vsync_interrupt_event_callback = system.CoreTiming().RegisterEvent(
-        "CAM::VsyncInterruptEventCallBack", [this](u64 userdata, s64 cycles_late) {
-            VsyncInterruptEventCallBack(userdata, cycles_late);
-        });
+    // completion_event_callback = system.CoreTiming().RegisterEvent(
+    //     "CAM::CompletionEventCallBack",
+    //     [this](u64 userdata, s64 cycles_late) { CompletionEventCallBack(userdata, cycles_late);
+    //     });
+    // vsync_interrupt_event_callback = system.CoreTiming().RegisterEvent(
+    //     "CAM::VsyncInterruptEventCallBack", [this](u64 userdata, s64 cycles_late) {
+    //         VsyncInterruptEventCallBack(userdata, cycles_late);
+    //     });
 }
 
 Module::~Module() {

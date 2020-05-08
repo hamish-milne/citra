@@ -120,7 +120,7 @@ void Timing::ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userdata)
 
     if ((Time_Current() + cycles_into_future) < Time_UB()) {
         LOG_WARNING(Core, "Event {} was scheduled {} cycles too soon for all cores to respond",
-                    event->Name(), s64(Time_UB() - (Time_Current() + cycles_into_future)));
+                    event->Name(), (Time_UB() - (Time_Current() + cycles_into_future)).count());
     }
 
     // Try to continue the current execution:

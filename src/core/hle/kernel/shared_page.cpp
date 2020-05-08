@@ -72,56 +72,50 @@ Handler::Handler(Core::Timing& timing) : timing(timing) {
     init_time = GetInitTime();
 
     using namespace std::placeholders;
-    update_time_event = timing.RegisterEvent("SharedPage::UpdateTimeCallback",
-                                             std::bind(&Handler::UpdateTimeCallback, this, _1, _2));
-    timing.ScheduleEvent(0, update_time_event, 0, 0);
+    // update_time_event = timing.RegisterEvent("SharedPage::UpdateTimeCallback",
+    //                                          std::bind(&Handler::UpdateTimeCallback, this, _1,
+    //                                          _2));
+    timing.ScheduleEvent(this, Ticks(0));
 
     float slidestate = Settings::values.factor_3d / 100.0f;
     shared_page.sliderstate_3d = static_cast<float_le>(slidestate);
 }
 
-/// Gets system time in 3DS format. The epoch is Jan 1900, and the unit is millisecond.
-u64 Handler::GetSystemTime() const {
-    std::chrono::milliseconds now =
-        init_time + std::chrono::duration_cast<std::chrono::milliseconds>(timing.GetGlobalTimeUs());
+/// Gets system time in 3DS format. The epoch is Jan 1900.
+std::chrono::milliseconds Handler::GetSystemTime() const {
+    const auto powered_on_time = std::chrono::duration_cast<milliseconds>(timing.Time_LB());
+    // init_time is since 1970-01-01; 3DS uses since 1900-01-01
+    const std::chrono::hours diff_1900_1970{24 * 25567};
+    auto now = diff_1900_1970 + init_time + powered_on_time;
 
     // 3DS system does't allow user to set a time before Jan 1 2000,
-    // so we use it as an auxiliary epoch to calculate the console time.
-    std::tm epoch_tm;
-    epoch_tm.tm_sec = 0;
-    epoch_tm.tm_min = 0;
-    epoch_tm.tm_hour = 0;
-    epoch_tm.tm_mday = 1;
-    epoch_tm.tm_mon = 0;
-    epoch_tm.tm_year = 100;
-    epoch_tm.tm_isdst = 0;
-    u64 epoch = std::mktime(&epoch_tm) * 1000;
-
-    // 3DS console time uses Jan 1 1900 as internal epoch,
-    // so we use the milliseconds between 1900 and 2000 as base console time
-    u64 console_time = 3155673600000ULL;
-
-    // Only when system time is after 2000, we set it as 3DS system time
-    if (now.count() > epoch) {
-        console_time += (now.count() - epoch);
+    // so we can clamp the reported time to the duration of 1900-2000
+    const std::chrono::hours minimum_system_time{24 * 36524};
+    if (now < minimum_system_time) {
+        return minimum_system_time;
+    } else {
+        return now;
     }
-
-    return console_time;
 }
 
-void Handler::UpdateTimeCallback(u64 userdata, int cycles_late) {
+const std::string& Handler::Name() const {
+    static const std::string name = "SharedPage::UpdateTimeCallback";
+    return name;
+}
+
+void Handler::Execute(Core::Timing& parent, u64 userdata, Ticks cycles_late) {
     DateTime& date_time =
         shared_page.date_time_counter % 2 ? shared_page.date_time_0 : shared_page.date_time_1;
 
-    date_time.date_time = GetSystemTime();
-    date_time.update_tick = timing.GetTicks();
+    date_time.date_time = GetSystemTime().count();
+    date_time.update_tick = timing.Time_LB().count();
     date_time.tick_to_second_coefficient = BASE_CLOCK_RATE_ARM11;
     date_time.tick_offset = 0;
 
     ++shared_page.date_time_counter;
 
     // system time is updated hourly
-    timing.ScheduleEvent(msToCycles(60 * 60 * 1000) - cycles_late, update_time_event);
+    timing.ScheduleEvent(this, Ticks(std::chrono::hours(1)) - cycles_late);
 }
 
 void Handler::SetMacAddress(const MacAddress& addr) {

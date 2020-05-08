@@ -749,8 +749,10 @@ public:
     };
 
 private:
-    void CompletionEventCallBack(u64 port_id, s64);
-    void VsyncInterruptEventCallBack(u64 port_id, s64 cycles_late);
+    class CompletionEvent;
+    std::unique_ptr<CompletionEvent> completion_event;
+    class VsyncInterruptEvent;
+    std::unique_ptr<VsyncInterruptEvent> vsync_interrupt_event;
 
     // Starts a receiving process on the specified port. This can only be called when is_busy = true
     // and is_receiving = false.
@@ -832,7 +834,7 @@ private:
         std::shared_ptr<Kernel::Event> buffer_error_interrupt_event;
         std::shared_ptr<Kernel::Event> vsync_interrupt_event;
 
-        std::deque<s64> vsync_timings;
+        std::deque<Ticks> vsync_timings;
 
         std::future<std::vector<u16>> capture_result; // will hold the received frame.
         Kernel::Process* dest_process{nullptr};

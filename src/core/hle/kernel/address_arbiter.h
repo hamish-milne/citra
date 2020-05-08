@@ -62,6 +62,8 @@ public:
     // void WakeUp(Thread::WakeupReason reason, std::shared_ptr<Thread> thread,
     //             std::shared_ptr<WaitObject> object);
 
+    void RemoveWaitingThread(Thread* thread);
+
 private:
     KernelSystem& kernel;
 

@@ -100,8 +100,8 @@ private:
         AudioTickCallback(Impl& parent_) : parent(parent_) {}
 
         const std::string& Name() const override {
-            static auto str = "AudioCore::DspHle::tick_event";
-            return str;
+            static const std::string name = "AudioCore::DspHle::tick_event";
+            return name;
         }
 
         void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {

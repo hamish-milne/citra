@@ -327,8 +327,8 @@ System::ResultStatus System::Load(Frontend::EmuWindow& emu_window, const std::st
 
 PerfStats::Results System::GetAndResetPerfStats() {
     return (perf_stats && timing)
-               ? perf_stats->GetAndResetStats(std::chrono::duration_cast<std::chrono::microseconds>(
-                     nanoseconds(timing->Time_LB())))
+               ? perf_stats->GetAndResetStats(
+                     std::chrono::duration_cast<std::chrono::microseconds>(timing->Time_LB()))
                : PerfStats::Results{};
 }
 

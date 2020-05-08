@@ -149,9 +149,8 @@ public:
     Memory::MemorySystem& memory;
 };
 
-ARM_Dynarmic::ARM_Dynarmic(Core::System* system, Memory::MemorySystem& memory, u32 id,
-                           Core::Timing& timer)
-    : ARM_Interface(id, timer), system(*system), memory(memory),
+ARM_Dynarmic::ARM_Dynarmic(Core::System* system, Memory::MemorySystem& memory, Core::Timing& timer)
+    : ARM_Interface(timer), system(*system), memory(memory),
       cb(std::make_unique<DynarmicUserCallbacks>(*this)) {
     SetPageTable(memory.GetCurrentPageTable());
 }

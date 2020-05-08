@@ -17,6 +17,23 @@ SERIALIZE_EXPORT_IMPL(Kernel::Timer)
 
 namespace Kernel {
 
+/// The timer callback event, called when a timer is fired
+class Timer::Callback : public Core::Event {
+    Timer& parent;
+
+public:
+    explicit Callback(Timer& parent_) : parent(parent_) {}
+
+    const std::string& Name() const override {
+        static const std::string name = "TimerCallback";
+        return name;
+    }
+
+    void Execute(Core::Timing& timing, u64 callback_id, Ticks cycles_late) override {
+        parent.Signal(cycles_late);
+    }
+};
+
 Timer::Timer(KernelSystem& kernel)
     : WaitObject(kernel), kernel(kernel), timer_event(new Callback(*this)) {}
 Timer::~Timer() {
@@ -54,7 +71,7 @@ void Timer::Set(Ticks initial, std::optional<Ticks> interval) {
     Cancel();
 
     initial_delay = initial;
-    interval_delay = interval;
+    interval_delay = boost::optional<Ticks>(interval.has_value(), interval.value_or(Ticks(0)));
 
     if (initial < Ticks(1)) {
         // Immediately invoke the callback
@@ -92,23 +109,6 @@ void Timer::Signal(Ticks cycles_late) {
         kernel.timing.ScheduleEvent(timer_event.get(), interval_delay.value() - cycles_late);
     }
 }
-
-/// The timer callback event, called when a timer is fired
-class Timer::Callback : public Core::Event {
-    Timer& parent;
-
-public:
-    explicit Callback(Timer& parent_) : parent(parent_) {}
-
-    const std::string& Name() const override {
-        static const std::string name = "TimerCallback";
-        return name;
-    }
-
-    void Execute(Core::Timing& timing, u64 callback_id, Ticks cycles_late) override {
-        parent.Signal(cycles_late);
-    }
-};
 
 // TimerManager::TimerManager(Core::Timing& timing) : timing(timing) {
 //     timer_callback_event_type =

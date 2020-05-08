@@ -14,7 +14,7 @@
 // #include "common/math_util.h"
 // #include "common/serialization/boost_flat_set.h"
 // #include "core/arm/arm_interface.h"
-// #include "core/arm/skyeye_common/armstate.h"
+#include "core/arm/skyeye_common/armstate.h"
 // #include "core/core.h"
 #include "core/hle/kernel/errors.h"
 // #include "core/hle/kernel/handle_table.h"
@@ -86,15 +86,16 @@ static std::optional<VAddr> AllocateTLS(KernelSystem& kernel, Process& process) 
         auto& vm_manager = process.vm_manager;
 
         // Map the page to the current process' address space.
-        vm_manager.MapBackingMemory(Memory::TLS_AREA_VADDR + available_page * Memory::PAGE_SIZE,
-                                    kernel.memory.GetFCRAMRef(*offset), Memory::PAGE_SIZE,
-                                    MemoryState::Locked);
+        vm_manager.MapBackingMemory(
+            Memory::TLS_AREA_VADDR + static_cast<VAddr>(available_page) * Memory::PAGE_SIZE,
+            kernel.memory.GetFCRAMRef(*offset), Memory::PAGE_SIZE, MemoryState::Locked);
     }
 
     // Mark the slot as used
     tls_slots[available_page].set(available_slot);
-    auto tls_address = Memory::TLS_AREA_VADDR + available_page * Memory::PAGE_SIZE +
-                       available_slot * Memory::TLS_ENTRY_SIZE;
+    auto tls_address = Memory::TLS_AREA_VADDR +
+                       static_cast<VAddr>(available_page) * Memory::PAGE_SIZE +
+                       static_cast<VAddr>(available_slot) * Memory::TLS_ENTRY_SIZE;
 
     kernel.memory.ZeroBlock(process, tls_address, Memory::TLS_ENTRY_SIZE);
     return tls_address;
@@ -103,14 +104,14 @@ static std::optional<VAddr> AllocateTLS(KernelSystem& kernel, Process& process) 
 std::shared_ptr<Thread> ThreadManager::CreateThread(
     KernelSystem& kernel, std::string name, VAddr entry_point, u32 priority, u32 arg,
     VAddr stack_top, std::shared_ptr<Kernel::Process> owner_process) {
-    auto tls_address = AllocateTLS(kernel, *owner_process);
-    auto thread = new Thread(*this, std::move(name), std::move(owner_process), tls_address);
+    auto tls_address = AllocateTLS(kernel, *owner_process).value();
+    auto thread = new Thread(kernel, *this, std::move(name), std::move(owner_process), tls_address);
     auto& context = *thread->context;
     context.SetCpuRegister(0, arg);
     context.SetProgramCounter(entry_point);
     context.SetStackPointer(stack_top);
     context.SetCpsr(USER32MODE | ((entry_point & 1) << 5)); // Usermode and THUMB mode
-    return {thread};
+    return std::shared_ptr<Thread>(thread);
 }
 
 class Thread::WakeupEvent : public Core::Event {
@@ -120,7 +121,8 @@ public:
     explicit WakeupEvent(Thread& parent_) : parent(parent_) {}
 
     const std::string& Name() const override {
-        return "Thread wakeup";
+        static const std::string name = "Thread wakeup";
+        return name;
     }
 
     void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {
@@ -128,23 +130,27 @@ public:
     }
 };
 
-Thread::Thread(ThreadManager& core_, std::string name_, std::shared_ptr<Kernel::Process> process_,
-               VAddr tls_address_)
-    : Kernel::WaitObject(nullptr), core(core_), name(std::move(name_)),
+Thread::Thread(KernelSystem& kernel, ThreadManager& core_, std::string name_,
+               std::shared_ptr<Kernel::Process> process_, VAddr tls_address_)
+    : WaitObject(kernel), core(core_), name(std::move(name_)),
       wakeup_event(new Thread::WakeupEvent(*this)), process(std::move(process_)),
       context(core.cpu->NewContext()), tls_address(tls_address_) {}
+
+Thread::Thread(KernelSystem& kernel, u32 core_id)
+    : WaitObject(kernel), core(kernel.GetThreadManager(core_id)) {}
 
 Thread::~Thread() {
     Stop();
 }
 
 Ticks ThreadManager::RunSegment(::Ticks segment_length) {
-    cycles_remaining = Cycles(segment_length, 1.0);
+    auto segment_cycles = Cycles(segment_length, 1.0);
+    cycles_remaining = segment_cycles;
     Cycles defer_cycles{0};
     do {
         if (Reschedule()) {
-            // TODO: Change CPU interface
-            CPU().Run(cycles_remaining);
+            // TODO: Change CPU interface?
+            CPU().Run(/*cycles_remaining*/);
         } else {
             // If idle, just advance time by the requested cycle count
             cycles_remaining = Cycles(0);
@@ -160,7 +166,9 @@ Ticks ThreadManager::RunSegment(::Ticks segment_length) {
         auto time_to_event = Cycles(root.TimeToNextEvent(), 1.0);
         if (CanCutSlice()) {
             // If we can cut the slice, we should do so at this point.
-            cycles_remaining = std::min(time_to_event, cycles_remaining);
+            auto new_cycles = std::min(time_to_event, cycles_remaining);
+            segment_cycles = segment_cycles - (cycles_remaining - new_cycles);
+            cycles_remaining = new_cycles;
         } else if (time_to_event < cycles_remaining) {
             // Event was scheduled by this core, very soon, and we can't cut the slice.
             // So we need to schedule a smaller segment
@@ -169,6 +177,7 @@ Ticks ThreadManager::RunSegment(::Ticks segment_length) {
         }
 
     } while (cycles_remaining > Cycles(0));
+    return segment_cycles.GetTicks(1.0);
 }
 
 bool ThreadManager::Reschedule() {
@@ -439,7 +448,7 @@ void Thread::ResumeFromWait(Kernel::WaitObject* object) {
 
         if (status == Status::WaitIPC && object->GetHandleType() == HandleType::ServerSession) {
             auto server_session = static_cast<ServerSession*>(object);
-            auto result = server_session->ReceiveIPCRequest(thread);
+            auto result = server_session->ReceiveIPCRequest(this);
             context->SetCpuRegister(0, result.raw);
         } else {
             context->SetCpuRegister(0, RESULT_SUCCESS.raw);

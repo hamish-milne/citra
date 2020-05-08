@@ -52,7 +52,7 @@ void Recorder::RegisterRequest(const std::shared_ptr<Kernel::ClientSession>& cli
 
     RequestRecord record = {/* id */ ++record_count,
                             /* status */ RequestStatus::Sent,
-                            /* client_process */ GetObjectInfo(client_thread->owner_process.get()),
+                            /* client_process */ GetObjectInfo(&client_thread->Process()),
                             /* client_thread */ GetObjectInfo(client_thread.get()),
                             /* client_session */ GetObjectInfo(client_session.get()),
                             /* client_port */ GetObjectInfo(client_session->parent->port.get()),

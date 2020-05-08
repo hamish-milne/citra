@@ -40,7 +40,7 @@ static std::unordered_map<Service::APT::AppletId, std::shared_ptr<Applet>> apple
 /// The CoreTiming event identifier for the Applet update callback.
 static std::unique_ptr<Core::Event> applet_update_event = nullptr;
 /// The interval at which the Applet update callback will be called, 16.6ms
-static const Ticks applet_update_interval{std::chrono::microseconds(16666)};
+static const Ticks applet_update_interval = std::chrono::microseconds(16666);
 
 ResultCode Applet::Create(Service::APT::AppletId id,
                           std::weak_ptr<Service::APT::AppletManager> manager) {
@@ -82,7 +82,8 @@ std::shared_ptr<Applet> Applet::Get(Service::APT::AppletId id) {
 class AppletUpdateEvent : public Core::Event {
 public:
     const std::string& Name() const override {
-        return "HLE Applet Update Event";
+        static const std::string name = "HLE Applet Update Event";
+        return name;
     }
 
     void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {

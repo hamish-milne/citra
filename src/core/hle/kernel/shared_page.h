@@ -86,7 +86,7 @@ struct SharedPageDef {
 static_assert(sizeof(SharedPageDef) == Memory::SHARED_PAGE_SIZE,
               "Shared page structure size is wrong");
 
-class Handler : public BackingMem {
+class Handler : public BackingMem, Core::Event {
 public:
     Handler(Core::Timing& timing);
 
@@ -113,11 +113,11 @@ public:
     }
 
 private:
-    u64 GetSystemTime() const;
-    void UpdateTimeCallback(u64 userdata, int cycles_late);
+    std::chrono::milliseconds GetSystemTime() const;
+    const std::string& Name() const override;
+    void Execute(Core::Timing& parent, u64 userdata, Ticks cycles_late) override;
     Core::Timing& timing;
-    Core::TimingEventType* update_time_event;
-    std::chrono::seconds init_time;
+    std::chrono::seconds init_time; //< configured power-on time as timestamp (epoch 1970-01-01)
 
     SharedPageDef shared_page;
 

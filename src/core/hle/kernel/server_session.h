@@ -63,6 +63,9 @@ public:
         hle_handler = std::move(hle_handler_);
     }
 
+    // TODO: Document this
+    ResultCode ReceiveIPCRequest(Thread* thread);
+
     /**
      * Handle a sync request from the emulated application.
      * @param thread Thread that initiated the request.

@@ -291,8 +291,8 @@ public:
     /// Reports an unimplemented function.
     void ReportUnimplemented() const;
 
-    class ThreadCallback;
-    friend class ThreadCallback;
+    // class ThreadCallback;
+    // friend class ThreadCallback;
 
 private:
     KernelSystem& kernel;
@@ -321,4 +321,4 @@ private:
 
 } // namespace Kernel
 
-BOOST_CLASS_EXPORT_KEY(Kernel::HLERequestContext::ThreadCallback)
+// BOOST_CLASS_EXPORT_KEY(Kernel::HLERequestContext::ThreadCallback)

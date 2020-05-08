@@ -28,7 +28,8 @@ public:
     explicit RunCallback(CheatEngine& parent_) : parent(parent_) {}
 
     const std::string& Name() const override {
-        return "CheatCore::run_event";
+        static const std::string name = "CheatCore::run_event";
+        return name;
     }
 
     void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {

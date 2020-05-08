@@ -20,6 +20,7 @@
 #include <limits>
 #include <vector>
 #include <boost/container/flat_set.hpp>
+#include <boost/serialization/split_free.hpp>
 #include "common/common_types.h"
 #include "core/hle/kernel/process.h"
 #include "core/hle/kernel/wait_object.h"
@@ -133,48 +134,91 @@ constexpr u64 MAX_VALUE_TO_MULTIPLY = std::numeric_limits<s64>::max() / BASE_CLO
 //     return cycles * 1000 / BASE_CLOCK_RATE_ARM11;
 // }
 
-struct Ticks {
-    constexpr explicit Ticks(s64 _count) : count(_count) {}
-    constexpr explicit operator s64() const {
-        return count;
-    }
-    constexpr operator nanoseconds() const {
-        return nanoseconds(count * std::nano::den / BASE_CLOCK_RATE_ARM11);
-    }
-    constexpr Ticks(nanoseconds ns) : count(ns.count() * BASE_CLOCK_RATE_ARM11 / std::nano::den) {
-        if (ns.count() > MAX_VALUE_TO_MULTIPLY) {
-            count = std::numeric_limits<s64>::max();
-        }
-    }
-    constexpr Ticks(milliseconds ms) : Ticks(nanoseconds(ms)) {}
-    // constexpr Ticks(Cycles cycles, float scale_factor)
-    //     : count(static_cast<s64>(s64(cycles) / scale_factor)) {}
+// struct Ticks {
+//     constexpr Ticks() : count(0) {}
+//     constexpr explicit Ticks(s64 _count) : count(_count) {}
+//     constexpr explicit operator s64() const {
+//         return count;
+//     }
+//     constexpr operator nanoseconds() const {
+//         return nanoseconds(count * std::nano::den / BASE_CLOCK_RATE_ARM11);
+//     }
+//     constexpr Ticks(nanoseconds ns) : count(ns.count() * BASE_CLOCK_RATE_ARM11 / std::nano::den)
+//     {
+//         if (ns.count() > MAX_VALUE_TO_MULTIPLY) {
+//             count = std::numeric_limits<s64>::max();
+//         }
+//     }
+//     // constexpr Ticks(milliseconds ms) : Ticks(nanoseconds(ms)) {}
+//     // constexpr Ticks(Cycles cycles, float scale_factor)
+//     //     : count(static_cast<s64>(s64(cycles) / scale_factor)) {}
 
-    constexpr bool operator<(const Ticks& right) const {
-        return count < right.count;
-    }
-    constexpr bool operator>(const Ticks& right) const {
-        return count > right.count;
-    }
-    constexpr Ticks operator+(const Ticks& right) const {
-        return Ticks(count + right.count);
-    }
-    constexpr Ticks operator-(const Ticks& right) const {
-        return Ticks(count - right.count);
-    }
+//     constexpr bool operator<(const Ticks& right) const {
+//         return count < right.count;
+//     }
+//     constexpr bool operator>(const Ticks& right) const {
+//         return count > right.count;
+//     }
+//     constexpr Ticks operator+(const Ticks& right) const {
+//         return Ticks(count + right.count);
+//     }
+//     constexpr Ticks operator-(const Ticks& right) const {
+//         return Ticks(count - right.count);
+//     }
 
-private:
-    s64 count;
+// private:
+//     s64 count;
+
+//     template <class Archive>
+//     void serialize(Archive& ar, const unsigned int) {
+//         ar& count;
+//     }
+//     friend class boost::serialization::access;
+// };
+
+using TicksImpl = std::chrono::duration<s64, std::ratio<1, BASE_CLOCK_RATE_ARM11>>;
+struct Ticks : public TicksImpl {
+public:
+    constexpr Ticks() : TicksImpl(0) {}
+    constexpr Ticks(const Ticks& t) : TicksImpl(t.count()) {}
+    constexpr Ticks(const TicksImpl& t) : TicksImpl(t.count()) {}
+    constexpr explicit Ticks(s64 count) : TicksImpl(count) {}
+
+    template <class n, class r>
+    constexpr Ticks(std::chrono::duration<n, r> d)
+        : TicksImpl(std::chrono::duration_cast<TicksImpl>(d)) {}
 };
 
+namespace boost::serialization {
+
+template <class Archive>
+void save(Archive& ar, const Ticks& obj, const unsigned int) {
+    ar << obj.count();
+}
+
+template <class Archive>
+void load(Archive& ar, Ticks& obj, const unsigned int) {
+    s64 count;
+    ar >> count;
+    obj = Ticks(count);
+}
+
+} // namespace boost::serialization
+
+BOOST_SERIALIZATION_SPLIT_FREE(Ticks);
+
 struct Cycles {
+    constexpr Cycles() : count(0) {}
     constexpr explicit Cycles(s64 _count) : count(_count) {}
     constexpr explicit operator s64() const {
         return count;
     }
     constexpr Cycles(Ticks ticks, float scale_factor)
-        : count(static_cast<s64>(s64(ticks) * scale_factor)) {}
+        : count(static_cast<s64>(ticks.count() * scale_factor)) {}
 
+    constexpr Ticks GetTicks(float scale_factor) {
+        return Ticks(static_cast<s64>(count / scale_factor));
+    }
     constexpr bool operator<(const Cycles& right) const {
         return count < right.count;
     }
@@ -190,6 +234,12 @@ struct Cycles {
 
 private:
     s64 count;
+
+    template <class Archive>
+    void serialize(Archive& ar, const unsigned int) {
+        ar& count;
+    }
+    friend class boost::serialization::access;
 };
 
 class ARM_Interface;

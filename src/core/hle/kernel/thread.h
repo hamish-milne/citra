@@ -27,6 +27,7 @@
 #include <boost/container/flat_set.hpp>
 #include <queue>
 #include "common/common_types.h"
+#include "common/construct.h"
 #include "core/arm/arm_interface.h"
 #include "core/core_timing.h"
 #include "core/hle/kernel/process.h"
@@ -57,8 +58,8 @@ public:
         Timeout // The thread was woken up due to a wait timeout.
     };
 
-    explicit Thread(ThreadManager& core, std::string name, std::shared_ptr<Kernel::Process> process,
-                    VAddr tls_address);
+    explicit Thread(KernelSystem& kernel, ThreadManager& core, std::string name,
+                    std::shared_ptr<Kernel::Process> process, VAddr tls_address);
     virtual ~Thread();
 
     bool operator>(Thread& right) {
@@ -73,6 +74,9 @@ public:
         return status;
     }
     ThreadManager& Core() {
+        return core;
+    }
+    const ThreadManager& Core() const {
         return core;
     }
 
@@ -105,6 +109,19 @@ public:
     }
     bool IsWokenBy(const Kernel::WaitObject* object);
 
+    static constexpr HandleType HANDLE_TYPE = HandleType::Thread;
+    HandleType GetHandleType() const override {
+        return HANDLE_TYPE;
+    }
+
+    bool ShouldWait(const Thread* thread) const override {
+        return status != Status::Destroyed;
+    }
+
+    void Acquire(Thread* thread) override {
+        ASSERT_MSG(!ShouldWait(thread), "object unavailable!");
+    }
+
     // TODO: Move to private
     const std::unique_ptr<ARM_Interface::ThreadContext> context;
 
@@ -115,12 +132,14 @@ private:
 
     class WakeupEvent;
 
+    // Constant
     ThreadManager& core;
-    const std::string name;
-    const std::shared_ptr<Kernel::Process> process;
-    const std::unique_ptr<WakeupEvent> wakeup_event;
-    const VAddr tls_address;
+    std::string name;
+    std::shared_ptr<Kernel::Process> process;
+    std::unique_ptr<WakeupEvent> wakeup_event;
+    VAddr tls_address;
 
+    // Mutable
     std::vector<Kernel::WaitObject*> waiting_on{};
     boost::container::flat_set<Kernel::Mutex*> held_mutexes{};
     Status status = Status::Created;
@@ -136,10 +155,26 @@ private:
 
     friend class ThreadManager;
 
+    explicit Thread(KernelSystem& kernel, u32 core_id);
+
     template <class Archive>
     void serialize(Archive& ar, const unsigned int file_version) {
         // TODO:
     }
+
+    template <class Archive>
+    static void load_construct(Archive& ar, Thread* t, const unsigned int file_version) {
+        u32 core_id;
+        ar >> core_id;
+        ::new (t) Kernel::Thread(Core::Global<KernelSystem>(), core_id);
+    }
+
+    template <class Archive>
+    void save_construct(Archive& ar, const unsigned int file_version) const {
+        ar << Core().GetId();
+    }
+
+    friend class ::construct_access;
     friend class boost::serialization::access;
 };
 
@@ -188,6 +223,10 @@ public:
         return *cpu;
     }
 
+    u32 GetId() const {
+        return core_id;
+    }
+
     std::shared_ptr<Kernel::Thread> CreateThread(KernelSystem& kernel, std::string name,
                                                  VAddr entry_point, u32 priority, u32 arg,
                                                  VAddr stack_top,
@@ -230,6 +269,7 @@ private:
     void serialize(Archive& ar, const unsigned int file_version) {
         // TODO:
     }
+
     friend class boost::serialization::access;
 };
 
@@ -558,22 +598,5 @@ std::shared_ptr<Thread> SetupMainThread(KernelSystem& kernel, u32 entry_point, u
 
 } // namespace Kernel
 
-// BOOST_CLASS_EXPORT_KEY(Kernel::Thread)
-
-// namespace boost::serialization {
-
-// template <class Archive>
-// inline void save_construct_data(Archive& ar, const Kernel::Thread* t,
-//                                 const unsigned int file_version) {
-//     ar << t->core_id;
-// }
-
-// template <class Archive>
-// inline void load_construct_data(Archive& ar, Kernel::Thread* t, const unsigned int file_version)
-// {
-//     u32 core_id;
-//     ar >> core_id;
-//     ::new (t) Kernel::Thread(Core::Global<Kernel::KernelSystem>(), core_id);
-// }
-
-// } // namespace boost::serialization
+BOOST_SERIALIZATION_CONSTRUCT(Kernel::Thread);
+BOOST_CLASS_EXPORT_KEY(Kernel::Thread)

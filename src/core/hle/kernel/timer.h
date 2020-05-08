@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <boost/serialization/optional.hpp>
 #include <boost/serialization/string.hpp>
 #include <boost/serialization/unordered_map.hpp>
 #include "common/common_types.h"
@@ -66,11 +67,11 @@ public:
     }
 
     u64 GetInitialDelay() const {
-        return s64(initial_delay);
+        return std::chrono::duration_cast<nanoseconds>(initial_delay).count();
     }
 
     u64 GetIntervalDelay() const {
-        return s64(interval_delay.value_or(0));
+        return std::chrono::duration_cast<nanoseconds>(interval_delay.value_or(Ticks(0))).count();
     }
 
     bool ShouldWait(const Thread* thread) const override;
@@ -102,8 +103,8 @@ private:
 
     ResetType reset_type; ///< The ResetType of this timer
 
-    Ticks initial_delay;                 ///< The delay until the timer fires for the first time
-    std::optional<Ticks> interval_delay; ///< The delay until the timer fires after the first time
+    Ticks initial_delay;                   ///< The delay until the timer fires for the first time
+    boost::optional<Ticks> interval_delay; ///< The delay until the timer fires after the first time
 
     bool signaled;    ///< Whether the timer has been signaled or not
     std::string name; ///< Name of timer (optional)
@@ -125,7 +126,7 @@ private:
         ar& interval_delay;
         ar& signaled;
         ar& name;
-        ar& callback_id;
+        // ar& callback_id;
     }
 };
 

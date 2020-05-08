@@ -77,6 +77,33 @@ void ServerSession::Acquire(Thread* thread) {
     pending_requesting_threads.pop_back();
 }
 
+ResultCode ServerSession::ReceiveIPCRequest(Thread* thread) {
+    if (parent->client == nullptr) {
+        return ERR_SESSION_CLOSED_BY_REMOTE;
+    }
+
+    VAddr target_address = thread->GetCommandBufferAddress();
+    VAddr source_address = currently_handling->GetCommandBufferAddress();
+
+    ResultCode translation_result =
+        TranslateCommandBuffer(kernel, kernel.memory, currently_handling, SharedFrom(thread),
+                               source_address, target_address, mapped_buffer_context, false);
+
+    // If a translation error occurred, immediately resume the client thread.
+    if (translation_result.IsError()) {
+        // Set the output of SendSyncRequest in the client thread to the translation output.
+        // currently_handling->SetWaitSynchronizationResult(translation_result);
+
+        // currently_handling->ResumeFromWait();
+        // currently_handling = nullptr;
+
+        // TODO(Subv): This path should try to wait again on the same objects.
+        ASSERT_MSG(false, "ReplyAndReceive translation error behavior unimplemented");
+    }
+
+    return translation_result;
+}
+
 ResultCode ServerSession::HandleSyncRequest(std::shared_ptr<Thread> thread) {
     // The ServerSession received a sync request, this means that there's new data available
     // from its ClientSession, so wake up any threads that may be waiting on a svcReplyAndReceive or

@@ -179,7 +179,8 @@ struct DspLle::Impl final {
     public:
         TeakraSliceEvent(Impl& parent_) : parent(parent_) {}
         const std::string& Name() const override {
-            return "DSP slice";
+            static const std::string name = "DSP slice";
+            return name;
         }
         void Execute(Core::Timing& timing, u64 userdata, Ticks late) {
             parent.RunTeakraSlice();
