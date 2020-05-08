@@ -26,10 +26,10 @@ private:
     std::unique_ptr<SVC> impl;
 };
 
-class SVC_SyncCallback;
-class SVC_IPCCallback;
+// class SVC_SyncCallback;
+// class SVC_IPCCallback;
 
 } // namespace Kernel
 
-BOOST_CLASS_EXPORT_KEY(Kernel::SVC_SyncCallback)
-BOOST_CLASS_EXPORT_KEY(Kernel::SVC_IPCCallback)
+// BOOST_CLASS_EXPORT_KEY(Kernel::SVC_SyncCallback)
+// BOOST_CLASS_EXPORT_KEY(Kernel::SVC_IPCCallback)

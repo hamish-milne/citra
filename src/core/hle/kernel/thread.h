@@ -35,6 +35,8 @@
 
 namespace Kernel {
 
+using ObjectPtr = std::shared_ptr<WaitObject>;
+
 class HLERequestContext;
 class IPCCallback;
 
@@ -56,6 +58,15 @@ public:
     enum class WakeupReason {
         Signal, // The thread was woken up by WakeupAllWaitingThreads due to an object signal.
         Timeout // The thread was woken up due to a wait timeout.
+    };
+    enum Processor : s32 {
+        IdDefault = -2, ///< Run thread on default core specified by exheader
+        IdAll = -1,     ///< Run thread on either core
+        Id0 = 0,        ///< Run thread on core 0 (AppCore)
+        Id1 = 1,        ///< Run thread on core 1 (SysCore)
+        Id2 = 2,        ///< Run thread on core 2 (additional n3ds core)
+        Id3 = 3,        ///< Run thread on core 3 (additional n3ds core)
+        IdMax = 4,      ///< Processor ID must be less than this
     };
 
     explicit Thread(KernelSystem& kernel, ThreadManager& core, std::string name,
@@ -124,6 +135,7 @@ public:
 
     // TODO: Move to private
     const std::unique_ptr<ARM_Interface::ThreadContext> context;
+    void Stop();
 
 private:
     int Order() {
@@ -140,7 +152,7 @@ private:
     VAddr tls_address;
 
     // Mutable
-    std::vector<Kernel::WaitObject*> waiting_on{};
+    std::vector<ObjectPtr> waiting_on{};
     boost::container::flat_set<Kernel::Mutex*> held_mutexes{};
     Status status = Status::Created;
     u32 nominal_priority = Priority::Default;
@@ -150,7 +162,6 @@ private:
     std::shared_ptr<HLERequestContext> hle_context;
     std::shared_ptr<IPCCallback> hle_callback;
 
-    void Stop();
     void SetStatus(Status status);
 
     friend class ThreadManager;
@@ -195,10 +206,10 @@ class ThreadManager {
 public:
     explicit ThreadManager(u32 core_id, std::unique_ptr<ARM_Interface> cpu);
 
-    ResultCode WaitOne(Kernel::WaitObject* object, nanoseconds timeout);
-    ResultCode WaitAny(std::vector<Kernel::WaitObject*> objects, nanoseconds timeout);
-    ResultCode WaitAll(std::vector<Kernel::WaitObject*> objects, nanoseconds timeout);
-    ResultCode WaitIPC(std::vector<Kernel::WaitObject*> objects);
+    ResultCode WaitOne(ObjectPtr object, nanoseconds timeout);
+    ResultCode WaitAny(std::vector<ObjectPtr> objects, nanoseconds timeout);
+    ResultCode WaitAll(std::vector<ObjectPtr> objects, nanoseconds timeout);
+    ResultCode WaitIPC(std::vector<ObjectPtr> objects);
     void WaitArb(AddressArbiter* arbiter, VAddr address, std::optional<nanoseconds> timeout);
     void Sleep(nanoseconds timeout);
     void Sleep();

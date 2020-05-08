@@ -92,7 +92,7 @@ std::shared_ptr<AddressArbiter> KernelSystem::CreateAddressArbiter(std::string n
 ResultCode AddressArbiter::ArbitrateAddress(ThreadManager& core, ArbitrationType type,
                                             VAddr address, s32 value, u64 timeout) {
 
-    auto timeout_callback = std::dynamic_pointer_cast<WakeupCallback>(shared_from_this());
+    // auto timeout_callback = std::dynamic_pointer_cast<WakeupCallback>(shared_from_this());
 
     switch (type) {
 

@@ -223,7 +223,7 @@ void ThreadManager::EndBlock() {
 
 void ThreadManager::RemoveThread(Kernel::Thread* thread) {}
 
-ResultCode ThreadManager::WaitOne(Kernel::WaitObject* object, std::chrono::nanoseconds timeout) {
+ResultCode ThreadManager::WaitOne(ObjectPtr object, std::chrono::nanoseconds timeout) {
     ASSERT(thread->status == Thread::Status::Running);
 
     // Check if we can sync immediately
@@ -248,26 +248,25 @@ ResultCode ThreadManager::WaitOne(Kernel::WaitObject* object, std::chrono::nanos
     return RESULT_SUCCESS;
 }
 
-ResultCode ThreadManager::WaitAny(std::vector<Kernel::WaitObject*> objects,
+ResultCode ThreadManager::WaitAny(std::vector<ObjectPtr> objects,
                                   std::chrono::nanoseconds timeout) {
     ASSERT(thread->status == Thread::Status::Running);
 
     // Check if we can sync immediately
-    auto active_obj =
-        std::find_if(objects.begin(), objects.end(),
-                     [this](const Kernel::WaitObject* obj) { return !obj->ShouldWait(thread); });
+    auto active_obj = std::find_if(objects.begin(), objects.end(),
+                                   [this](const auto& obj) { return !obj->ShouldWait(thread); });
     if (active_obj != objects.end()) {
         (*active_obj)->Acquire(thread);
         thread->context->SetCpuRegister(0, RESULT_SUCCESS.raw);
-        thread->context->SetCpuRegister(1, active_obj - objects.begin());
+        thread->context->SetCpuRegister(1, static_cast<u32>(active_obj - objects.begin()));
         return RESULT_SUCCESS;
     }
 
     // Schedule the timeout
     if (timeout.count() == 0) {
-        auto inactive_obj =
-            std::find_if(objects.begin(), objects.end(),
-                         [this](const Kernel::WaitObject* obj) { return obj->ShouldWait(thread); });
+        auto inactive_obj = std::find_if(objects.begin(), objects.end(), [this](const auto& obj) {
+            return obj->ShouldWait(thread);
+        });
         if (inactive_obj != objects.end()) {
             return RESULT_TIMEOUT;
         }
@@ -284,19 +283,18 @@ ResultCode ThreadManager::WaitAny(std::vector<Kernel::WaitObject*> objects,
     return RESULT_SUCCESS;
 }
 
-ResultCode ThreadManager::WaitIPC(std::vector<Kernel::WaitObject*> objects) {
+ResultCode ThreadManager::WaitIPC(std::vector<ObjectPtr> objects) {
     ASSERT(thread->status == Thread::Status::Running);
 
     // Check if we can sync immediately
-    auto active_obj =
-        std::find_if(objects.begin(), objects.end(),
-                     [this](const Kernel::WaitObject* obj) { return !obj->ShouldWait(thread); });
+    auto active_obj = std::find_if(objects.begin(), objects.end(),
+                                   [this](const auto& obj) { return !obj->ShouldWait(thread); });
     if (active_obj != objects.end()) {
         (*active_obj)->Acquire(thread);
 
         if ((*active_obj)->GetHandleType() != HandleType::ServerSession)
             return RESULT_SUCCESS;
-        auto server_session = static_cast<ServerSession*>(*active_obj);
+        auto server_session = dynamic_cast<ServerSession*>(active_obj->get());
         return server_session->ReceiveIPCRequest(thread);
     }
 
@@ -309,14 +307,13 @@ ResultCode ThreadManager::WaitIPC(std::vector<Kernel::WaitObject*> objects) {
     return RESULT_SUCCESS;
 }
 
-ResultCode ThreadManager::WaitAll(std::vector<Kernel::WaitObject*> objects,
+ResultCode ThreadManager::WaitAll(std::vector<ObjectPtr> objects,
                                   std::chrono::nanoseconds timeout) {
     ASSERT(thread->status == Thread::Status::Running);
 
     // Check if we can sync immediately
-    auto inactive_obj =
-        std::find_if(objects.begin(), objects.end(),
-                     [this](const Kernel::WaitObject* obj) { return obj->ShouldWait(thread); });
+    auto inactive_obj = std::find_if(objects.begin(), objects.end(),
+                                     [this](const auto& obj) { return obj->ShouldWait(thread); });
     if (inactive_obj == objects.end()) {
         for (auto obj : objects) {
             obj->Acquire(thread);
@@ -327,10 +324,9 @@ ResultCode ThreadManager::WaitAll(std::vector<Kernel::WaitObject*> objects,
 
     // Schedule the timeout
     if (timeout.count() == 0) {
-        auto active_obj =
-            std::find_if(objects.begin(), objects.end(), [this](const Kernel::WaitObject* obj) {
-                return !obj->ShouldWait(thread);
-            });
+        auto active_obj = std::find_if(objects.begin(), objects.end(), [this](const auto& obj) {
+            return !obj->ShouldWait(thread);
+        });
         if (active_obj == objects.end()) {
             return RESULT_TIMEOUT;
         }
@@ -371,7 +367,7 @@ void Thread::WaitHleEvent(HLERequestContext* context, std::shared_ptr<Kernel::Ev
     ASSERT(status == Thread::Status::Running);
     status = Thread::Status::WaitSyncAny;
     hle_event->AddWaitingThread(Kernel::SharedFrom(this));
-    waiting_on = {hle_event.get()};
+    waiting_on = {hle_event};
     hle_context = context->shared_from_this();
     hle_callback = callback;
     if (timeout.count() > 0) {
@@ -424,12 +420,13 @@ void Thread::Stop() {
 bool Thread::IsWokenBy(const Kernel::WaitObject* object) {
 
     if (status == Thread::Status::WaitSyncAny) {
-        return std::find(waiting_on.begin(), waiting_on.end(), object) != waiting_on.end();
+        return std::find_if(waiting_on.begin(), waiting_on.end(), [&](const auto& obj) {
+                   return obj.get() == object;
+               }) != waiting_on.end();
     } else if (status == Thread::Status::WaitSyncAll) {
-        return std::find_if(waiting_on.begin(), waiting_on.end(),
-                            [&](const Kernel::WaitObject* obj) {
-                                return obj == object || !obj->ShouldWait(this);
-                            }) == waiting_on.end();
+        return std::find_if(waiting_on.begin(), waiting_on.end(), [&](const auto& obj) {
+                   return obj.get() == object || !obj->ShouldWait(this);
+               }) == waiting_on.end();
     } else {
         return false;
     }
@@ -442,7 +439,8 @@ void Thread::ResumeFromWait(Kernel::WaitObject* object) {
         }
         context->SetCpuRegister(0, RESULT_SUCCESS.raw);
     } else if (status == Status::WaitSyncAny || status == Status::WaitIPC) {
-        auto it = std::find(waiting_on.begin(), waiting_on.end(), object);
+        auto it = std::find_if(waiting_on.begin(), waiting_on.end(),
+                               [&](const auto& obj) { return obj.get() == object; });
         auto idx = it - waiting_on.begin();
         object->Acquire(this);
 
@@ -476,7 +474,7 @@ void Thread::ResumeFromWait(Kernel::WaitObject* object) {
 void Thread::SetPriority(u32 priority) {
     nominal_priority = priority;
     for (auto obj : waiting_on) {
-        auto mutex = dynamic_cast<Kernel::Mutex*>(obj);
+        auto mutex = dynamic_cast<Kernel::Mutex*>(obj.get());
         if (mutex && mutex->holding_thread) {
             mutex->holding_thread->real_priority.reset();
         }
