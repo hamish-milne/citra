@@ -55,7 +55,7 @@ class Timing::EventQueue : public min_queue<Timing::EventInstance> {};
 Timing::Timing(u32 core_count, std::function<ARM_Interface*(Timing& timing)> constructor)
     : events(new EventQueue) {
     for (u32 i = 0; i < core_count; i++) {
-        cores.emplace_back(i, std::unique_ptr<ARM_Interface>(constructor(*this)));
+        cores.emplace_back(*this, i, std::unique_ptr<ARM_Interface>(constructor(*this)));
     }
 }
 
@@ -115,6 +115,11 @@ Ticks Timing::TimeToNextEvent() const {
     return events->top().time - Time_LB();
 }
 
+Ticks Timing::Time_Current() const {
+    const auto& core = CurrentCore();
+    return core.segment_end - core.cycles_remaining.GetTicks(scale_factor);
+}
+
 void Timing::ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userdata) {
     ASSERT(cycles_into_future > Ticks(0));
 
@@ -125,10 +130,11 @@ void Timing::ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userdata)
 
     // Try to continue the current execution:
     auto& core = cores[current_core_id];
-    if (Cycles(cycles_into_future, 1.0) < core.cycles_remaining) {
+    auto real_cycles = Cycles(cycles_into_future, scale_factor);
+    if (real_cycles < core.cycles_remaining) {
         // If we're idle, try executing the event now to see if it'll wake us up
         if (core.AllThreadsIdle()) {
-            core.AddCycles(Cycles(cycles_into_future, 1.0));
+            core.AddCycles(real_cycles);
             event->Execute(*this, userdata, Ticks(0));
             core.Reschedule();
             return;

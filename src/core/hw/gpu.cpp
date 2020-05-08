@@ -31,9 +31,10 @@ Regs g_regs;
 Memory::MemorySystem* g_memory;
 
 /// 268MHz CPU clocks / 60Hz frames per second
-const u64 frame_ticks = static_cast<u64>(BASE_CLOCK_RATE_ARM11 / SCREEN_REFRESH_RATE);
+const auto frame_ticks = Ticks(BASE_CLOCK_RATE_ARM11 / SCREEN_REFRESH_RATE);
 /// Event id for CoreTiming
-static Core::TimingEventType* vblank_event;
+class VBlankCallback;
+static std::unique_ptr<VBlankCallback> vblank_event;
 
 template <typename T>
 inline void Read(T& var, const u32 raw_addr) {
@@ -505,20 +506,29 @@ template void Write<u16>(u32 addr, const u16 data);
 template void Write<u8>(u32 addr, const u8 data);
 
 /// Update hardware
-static void VBlankCallback(u64 userdata, s64 cycles_late) {
-    VideoCore::g_renderer->SwapBuffers();
+class VBlankCallback : public Core::Event {
 
-    // Signal to GSP that GPU interrupt has occurred
-    // TODO(yuriks): hwtest to determine if PDC0 is for the Top screen and PDC1 for the Sub
-    // screen, or if both use the same interrupts and these two instead determine the
-    // beginning and end of the VBlank period. If needed, split the interrupt firing into
-    // two different intervals.
-    Service::GSP::SignalInterrupt(Service::GSP::InterruptId::PDC0);
-    Service::GSP::SignalInterrupt(Service::GSP::InterruptId::PDC1);
+public:
+    const std::string& Name() const override {
+        static const std::string name = "GPU::VBlankCallback";
+        return name;
+    }
 
-    // Reschedule recurrent event
-    Core::System::GetInstance().CoreTiming().ScheduleEvent(frame_ticks - cycles_late, vblank_event);
-}
+    void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {
+        VideoCore::g_renderer->SwapBuffers();
+
+        // Signal to GSP that GPU interrupt has occurred
+        // TODO(yuriks): hwtest to determine if PDC0 is for the Top screen and PDC1 for the Sub
+        // screen, or if both use the same interrupts and these two instead determine the
+        // beginning and end of the VBlank period. If needed, split the interrupt firing into
+        // two different intervals.
+        Service::GSP::SignalInterrupt(Service::GSP::InterruptId::PDC0);
+        Service::GSP::SignalInterrupt(Service::GSP::InterruptId::PDC1);
+
+        // Reschedule recurrent event
+        timing.ScheduleEvent(this, frame_ticks - cycles_late);
+    }
+};
 
 /// Initialize hardware
 void Init(Memory::MemorySystem& memory) {
@@ -552,8 +562,8 @@ void Init(Memory::MemorySystem& memory) {
     framebuffer_sub.active_fb = 0;
 
     Core::Timing& timing = Core::System::GetInstance().CoreTiming();
-    vblank_event = timing.RegisterEvent("GPU::VBlankCallback", VBlankCallback);
-    timing.ScheduleEvent(frame_ticks, vblank_event);
+    vblank_event = std::make_unique<VBlankCallback>();
+    timing.ScheduleEvent(vblank_event.get(), frame_ticks);
 
     LOG_DEBUG(HW_GPU, "initialized OK");
 }

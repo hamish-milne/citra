@@ -150,35 +150,37 @@ WaitTreeThread::WaitTreeThread(const Kernel::Thread& thread) : WaitTreeWaitObjec
 QString WaitTreeThread::GetText() const {
     const auto& thread = static_cast<const Kernel::Thread&>(object);
     QString status;
-    switch (thread.status) {
-    case Kernel::ThreadStatus::Running:
+    switch (thread.GetStatus()) {
+    case Kernel::Thread::Status::Running:
         status = tr("running");
         break;
-    case Kernel::ThreadStatus::Ready:
+    case Kernel::Thread::Status::Ready:
         status = tr("ready");
         break;
-    case Kernel::ThreadStatus::WaitArb:
+    case Kernel::Thread::Status::WaitArb:
         status = tr("waiting for address 0x%1").arg(thread.wait_address, 8, 16, QLatin1Char('0'));
         break;
-    case Kernel::ThreadStatus::WaitSleep:
+    case Kernel::Thread::Status::WaitSleep:
         status = tr("sleeping");
         break;
-    case Kernel::ThreadStatus::WaitIPC:
+    case Kernel::Thread::Status::WaitIPC:
         status = tr("waiting for IPC response");
         break;
-    case Kernel::ThreadStatus::WaitSynchAll:
-    case Kernel::ThreadStatus::WaitSynchAny:
+    case Kernel::Thread::Status::WaitSyncAll:
+    case Kernel::Thread::Status::WaitSyncAny:
         status = tr("waiting for objects");
         break;
-    case Kernel::ThreadStatus::WaitHleEvent:
+    case Kernel::Thread::Status::WaitHleEvent:
         status = tr("waiting for HLE return");
         break;
-    case Kernel::ThreadStatus::Dormant:
+    case Kernel::Thread::Status::Created:
         status = tr("dormant");
         break;
-    case Kernel::ThreadStatus::Dead:
+    case Kernel::Thread::Status::Destroyed:
         status = tr("dead");
         break;
+    default:
+        status = tr("unknown");
     }
     QString pc_info = tr(" PC = 0x%1 LR = 0x%2")
                           .arg(thread.context->GetProgramCounter(), 8, 16, QLatin1Char('0'))
@@ -189,23 +191,23 @@ QString WaitTreeThread::GetText() const {
 QColor WaitTreeThread::GetColor() const {
     const auto& thread = static_cast<const Kernel::Thread&>(object);
     switch (thread.status) {
-    case Kernel::ThreadStatus::Running:
+    case Kernel::Thread::Status::Running:
         return QColor(Qt::GlobalColor::darkGreen);
-    case Kernel::ThreadStatus::Ready:
+    case Kernel::Thread::Status::Ready:
         return QColor(Qt::GlobalColor::darkBlue);
-    case Kernel::ThreadStatus::WaitArb:
+    case Kernel::Thread::Status::WaitArb:
         return QColor(Qt::GlobalColor::darkRed);
-    case Kernel::ThreadStatus::WaitSleep:
+    case Kernel::Thread::Status::WaitSleep:
         return QColor(Qt::GlobalColor::darkYellow);
-    case Kernel::ThreadStatus::WaitIPC:
+    case Kernel::Thread::Status::WaitIPC:
         return QColor(Qt::GlobalColor::darkCyan);
-    case Kernel::ThreadStatus::WaitSynchAll:
-    case Kernel::ThreadStatus::WaitSynchAny:
-    case Kernel::ThreadStatus::WaitHleEvent:
+    case Kernel::Thread::Status::WaitSyncAll:
+    case Kernel::Thread::Status::WaitSyncAny:
+    case Kernel::Thread::Status::WaitHleEvent:
         return QColor(Qt::GlobalColor::red);
-    case Kernel::ThreadStatus::Dormant:
+    case Kernel::Thread::Status::Created:
         return QColor(Qt::GlobalColor::darkCyan);
-    case Kernel::ThreadStatus::Dead:
+    case Kernel::Thread::Status::Destroyed:
         return QColor(Qt::GlobalColor::gray);
     default:
         return WaitTreeItem::GetColor();
@@ -216,24 +218,24 @@ std::vector<std::unique_ptr<WaitTreeItem>> WaitTreeThread::GetChildren() const {
     std::vector<std::unique_ptr<WaitTreeItem>> list(WaitTreeWaitObject::GetChildren());
 
     const auto& thread = static_cast<const Kernel::Thread&>(object);
-    const auto& process = thread.owner_process;
+    const auto& process = thread.Process();
 
     QString processor;
-    switch (thread.processor_id) {
-    case Kernel::ThreadProcessorId::ThreadProcessorIdDefault:
+    switch (thread.Core().GetId()) {
+    case Kernel::Thread::Processor::IdDefault:
         processor = tr("default");
         break;
-    case Kernel::ThreadProcessorId::ThreadProcessorIdAll:
+    case Kernel::Thread::Processor::IdAll:
         processor = tr("all");
         break;
-    case Kernel::ThreadProcessorId::ThreadProcessorId0:
+    case Kernel::Thread::Processor::Id0:
         processor = tr("AppCore");
         break;
-    case Kernel::ThreadProcessorId::ThreadProcessorId1:
+    case Kernel::Thread::Processor::Id1:
         processor = tr("SysCore");
         break;
     default:
-        processor = tr("Unknown processor %1").arg(thread.processor_id);
+        processor = tr("Unknown processor %1").arg(thread.Core().GetId());
         break;
     }
 
@@ -242,24 +244,24 @@ std::vector<std::unique_ptr<WaitTreeItem>> WaitTreeThread::GetChildren() const {
     list.push_back(std::make_unique<WaitTreeText>(tr("thread id = %1").arg(thread.GetThreadId())));
     list.push_back(
         std::make_unique<WaitTreeText>(tr("process = %1 (%2)")
-                                           .arg(QString::fromStdString(process->GetName()))
-                                           .arg(process->process_id)));
+                                           .arg(QString::fromStdString(process.GetName()))
+                                           .arg(process.process_id)));
     list.push_back(std::make_unique<WaitTreeText>(tr("priority = %1(current) / %2(normal)")
-                                                      .arg(thread.current_priority)
+                                                      .arg(thread.real_priority.value_or(-1))
                                                       .arg(thread.nominal_priority)));
-    list.push_back(std::make_unique<WaitTreeText>(
-        tr("last running ticks = %1").arg(thread.last_running_ticks)));
+    // list.push_back(std::make_unique<WaitTreeText>(
+    //     tr("last running ticks = %1").arg(thread.last_running_ticks)));
 
     if (thread.held_mutexes.empty()) {
         list.push_back(std::make_unique<WaitTreeText>(tr("not holding mutex")));
     } else {
         list.push_back(std::make_unique<WaitTreeMutexList>(thread.held_mutexes));
     }
-    if (thread.status == Kernel::ThreadStatus::WaitSynchAny ||
-        thread.status == Kernel::ThreadStatus::WaitSynchAll ||
-        thread.status == Kernel::ThreadStatus::WaitHleEvent) {
-        list.push_back(std::make_unique<WaitTreeObjectList>(thread.wait_objects,
-                                                            thread.IsSleepingOnWaitAll()));
+    if (thread.GetStatus() == Kernel::Thread::Status::WaitSyncAny ||
+        thread.GetStatus() == Kernel::Thread::Status::WaitSyncAll ||
+        thread.GetStatus() == Kernel::Thread::Status::WaitHleEvent) {
+        list.push_back(std::make_unique<WaitTreeObjectList>(
+            thread.waiting_on, thread.GetStatus() == Kernel::Thread::Status::WaitSyncAll));
     }
 
     return list;

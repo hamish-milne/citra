@@ -213,10 +213,10 @@ struct Cycles {
     constexpr explicit operator s64() const {
         return count;
     }
-    constexpr Cycles(Ticks ticks, float scale_factor)
+    constexpr Cycles(Ticks ticks, double scale_factor)
         : count(static_cast<s64>(ticks.count() * scale_factor)) {}
 
-    constexpr Ticks GetTicks(float scale_factor) {
+    constexpr Ticks GetTicks(double scale_factor) const {
         return Ticks(static_cast<s64>(count / scale_factor));
     }
     constexpr bool operator<(const Cycles& right) const {
@@ -258,17 +258,35 @@ public:
     Timing(u32 core_count, std::function<ARM_Interface*(Timing& timing)> constructor);
     ~Timing();
 
-    Kernel::ThreadManager& GetCore(int core_id) const;
+    Kernel::ThreadManager& GetCore(int core_id) {
+        return cores[core_id];
+    }
+
+    const Kernel::ThreadManager& GetCore(int core_id) const {
+        return cores[core_id];
+    }
+
     u32 CoreCount() {
         return static_cast<u32>(cores.size());
     }
-    Kernel::ThreadManager& CurrentCore() const {
+
+    Kernel::ThreadManager& CurrentCore() {
         return GetCore(current_core_id);
     }
+
+    const Kernel::ThreadManager& CurrentCore() const {
+        return GetCore(current_core_id);
+    }
+
     void ScheduleEvent(Event* event, Ticks cycles_into_future, u64 userdata = 0);
     void UnscheduleEvent(Event* event, u64 userdata = 0);
     void RunSlice();
-    Ticks Time_LB() const;
+    void UpdateClockSpeed(double scale_factor) {
+        this->scale_factor = scale_factor;
+    }
+    Ticks Time_LB() const {
+        return max_core_time;
+    }
     Ticks Time_Current() const;
     Ticks Time_UB() const {
         return std::max(Time_Current(), max_core_time);
@@ -305,6 +323,7 @@ private:
     std::unique_ptr<EventQueue> events;
     Ticks current_slice_length{0};
     Ticks max_core_time{0};
+    double scale_factor = 1.0;
 
     friend class Kernel::ThreadManager;
 

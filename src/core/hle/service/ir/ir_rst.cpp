@@ -66,7 +66,23 @@ void IR_RST::UnloadInputDevices() {
     c_stick = nullptr;
 }
 
-void IR_RST::UpdateCallback(u64 userdata, s64 cycles_late) {
+class IR_RST::UpdateCallbackEvent : public Core::Event {
+    IR_RST& parent;
+
+public:
+    explicit UpdateCallbackEvent(IR_RST& parent_) : parent(parent_) {}
+
+    const std::string& Name() const override {
+        static const std::string name = "IRRST:UpdateCallBack";
+        return name;
+    }
+
+    void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) {
+        parent.UpdateCallback(cycles_late);
+    }
+};
+
+void IR_RST::UpdateCallback(Ticks cycles_late) {
     SharedMem* mem = reinterpret_cast<SharedMem*>(shared_memory->GetPointer());
 
     if (is_device_reload_pending.exchange(false))
@@ -118,13 +134,14 @@ void IR_RST::UpdateCallback(u64 userdata, s64 cycles_late) {
     // If we just updated index 0, provide a new timestamp
     if (mem->index == 0) {
         mem->index_reset_ticks_previous = mem->index_reset_ticks;
-        mem->index_reset_ticks = system.CoreTiming().GetTicks();
+        mem->index_reset_ticks = static_cast<u64_le>(system.CoreTiming().Time_Current().count());
     }
 
     update_event->Signal();
 
     // Reschedule recurrent event
-    system.CoreTiming().ScheduleEvent(msToCycles(update_period) - cycles_late, update_callback_id);
+    system.CoreTiming().ScheduleEvent(update_callback.get(),
+                                      milliseconds(update_period) - cycles_late);
 }
 
 void IR_RST::GetHandles(Kernel::HLERequestContext& ctx) {
@@ -144,7 +161,7 @@ void IR_RST::Initialize(Kernel::HLERequestContext& ctx) {
 
     next_pad_index = 0;
     is_device_reload_pending.store(true);
-    system.CoreTiming().ScheduleEvent(msToCycles(update_period), update_callback_id);
+    system.CoreTiming().ScheduleEvent(update_callback.get(), milliseconds(update_period));
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(RESULT_SUCCESS);
@@ -155,7 +172,7 @@ void IR_RST::Initialize(Kernel::HLERequestContext& ctx) {
 void IR_RST::Shutdown(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx, 0x03, 0, 0);
 
-    system.CoreTiming().UnscheduleEvent(update_callback_id, 0);
+    system.CoreTiming().UnscheduleEvent(update_callback.get());
     UnloadInputDevices();
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
@@ -164,6 +181,8 @@ void IR_RST::Shutdown(Kernel::HLERequestContext& ctx) {
 }
 
 IR_RST::IR_RST(Core::System& system) : ServiceFramework("ir:rst", 1), system(system) {
+    update_callback = std::make_unique<UpdateCallbackEvent>(*this);
+
     using namespace Kernel;
     // Note: these two kernel objects are even available before Initialize service function is
     // called.
@@ -174,9 +193,9 @@ IR_RST::IR_RST(Core::System& system) : ServiceFramework("ir:rst", 1), system(sys
             .Unwrap();
     update_event = system.Kernel().CreateEvent(ResetType::OneShot, "IRRST:UpdateEvent");
 
-    update_callback_id = system.CoreTiming().RegisterEvent(
-        "IRRST:UpdateCallBack",
-        [this](u64 userdata, s64 cycles_late) { UpdateCallback(userdata, cycles_late); });
+    // update_callback_id = system.CoreTiming().RegisterEvent(
+    //     "IRRST:UpdateCallBack",
+    //     [this](u64 userdata, s64 cycles_late) { UpdateCallback(userdata, cycles_late); });
 
     static const FunctionInfo functions[] = {
         {0x00010000, &IR_RST::GetHandles, "GetHandles"},

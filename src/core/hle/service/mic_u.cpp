@@ -63,8 +63,8 @@ constexpr u32 GetSampleRateInHz(SampleRate sample_rate) {
 }
 
 // The 3ds hardware was tested to write to the sharedmem every 15 samples regardless of sample_rate.
-constexpr u64 GetBufferUpdatePeriod(SampleRate sample_rate) {
-    return 15 * BASE_CLOCK_RATE_ARM11 / GetSampleRateInHz(sample_rate);
+constexpr Ticks GetBufferUpdatePeriod(SampleRate sample_rate) {
+    return Ticks(15 * BASE_CLOCK_RATE_ARM11 / GetSampleRateInHz(sample_rate));
 }
 
 // Variables holding the current mic buffer writing state
@@ -125,14 +125,14 @@ private:
     friend class boost::serialization::access;
 };
 
-struct MIC_U::Impl {
+struct MIC_U::Impl : Core::Event {
     explicit Impl(Core::System& system) : timing(system.CoreTiming()) {
         buffer_full_event =
             system.Kernel().CreateEvent(Kernel::ResetType::OneShot, "MIC_U::buffer_full_event");
-        buffer_write_event =
-            timing.RegisterEvent("MIC_U::UpdateBuffer", [this](u64 userdata, s64 cycles_late) {
-                UpdateSharedMemBuffer(userdata, cycles_late);
-            });
+        // buffer_write_event =
+        //     timing.RegisterEvent("MIC_U::UpdateBuffer", [this](u64 userdata, s64 cycles_late) {
+        //         UpdateSharedMemBuffer(userdata, cycles_late);
+        //     });
     }
 
     void MapSharedMem(Kernel::HLERequestContext& ctx) {
@@ -161,7 +161,12 @@ struct MIC_U::Impl {
         LOG_TRACE(Service_MIC, "called");
     }
 
-    void UpdateSharedMemBuffer(u64 userdata, s64 cycles_late) {
+    const std::string& Name() const override {
+        static const std::string name = "MIC_U::UpdateBuffer";
+        return name;
+    }
+
+    void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override {
         if (change_mic_impl_requested.exchange(false)) {
             CreateMic();
         }
@@ -177,8 +182,7 @@ struct MIC_U::Impl {
         }
 
         // schedule next run
-        timing.ScheduleEvent(GetBufferUpdatePeriod(state.sample_rate) - cycles_late,
-                             buffer_write_event);
+        timing.ScheduleEvent(this, GetBufferUpdatePeriod(state.sample_rate) - cycles_late);
     }
 
     void StartSampling() {
@@ -214,7 +218,7 @@ struct MIC_U::Impl {
 
         StartSampling();
 
-        timing.ScheduleEvent(GetBufferUpdatePeriod(state.sample_rate), buffer_write_event);
+        timing.ScheduleEvent(this, GetBufferUpdatePeriod(state.sample_rate));
 
         IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
         rb.Push(RESULT_SUCCESS);
@@ -241,7 +245,7 @@ struct MIC_U::Impl {
         IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
         rb.Push(RESULT_SUCCESS);
         mic->StopSampling();
-        timing.RemoveEvent(buffer_write_event);
+        timing.UnscheduleEvent(this);
         LOG_TRACE(Service_MIC, "called");
     }
 
@@ -389,7 +393,7 @@ struct MIC_U::Impl {
 
     std::atomic<bool> change_mic_impl_requested = false;
     std::shared_ptr<Kernel::Event> buffer_full_event;
-    Core::TimingEventType* buffer_write_event = nullptr;
+    // Core::TimingEventType* buffer_write_event = nullptr;
     std::shared_ptr<Kernel::SharedMemory> shared_memory;
     u32 client_version = 0;
     bool allow_shell_closed = false;

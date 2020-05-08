@@ -198,6 +198,7 @@ DirectionState GetStickDirectionState(s16 circle_pad_x, s16 circle_pad_y);
 class Module final {
 public:
     explicit Module(Core::System& system);
+    ~Module();
 
     class Interface : public ServiceFramework<Interface> {
     public:
@@ -298,9 +299,9 @@ public:
 
 private:
     void LoadInputDevices();
-    void UpdatePadCallback(u64 userdata, s64 cycles_late);
-    void UpdateAccelerometerCallback(u64 userdata, s64 cycles_late);
-    void UpdateGyroscopeCallback(u64 userdata, s64 cycles_late);
+    void UpdatePadCallback(Ticks cycles_late);
+    void UpdateAccelerometerCallback(Ticks cycles_late);
+    void UpdateGyroscopeCallback(Ticks cycles_late);
 
     Core::System& system;
 
@@ -326,9 +327,12 @@ private:
     int enable_accelerometer_count = 0; // positive means enabled
     int enable_gyroscope_count = 0;     // positive means enabled
 
-    Core::TimingEventType* pad_update_event;
-    Core::TimingEventType* accelerometer_update_event;
-    Core::TimingEventType* gyroscope_update_event;
+    class UpdateEvent;
+    std::unique_ptr<UpdateEvent> update_event;
+    enum class UpdateType { Pad, Accelerometer, Gyroscope };
+    // Core::TimingEventType* pad_update_event;
+    // Core::TimingEventType* accelerometer_update_event;
+    // Core::TimingEventType* gyroscope_update_event;
 
     std::atomic<bool> is_device_reload_pending{true};
     std::array<std::unique_ptr<Input::ButtonDevice>, Settings::NativeButton::NUM_BUTTONS_HID>

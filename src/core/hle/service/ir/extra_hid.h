@@ -40,7 +40,7 @@ static_assert(sizeof(ExtraHIDResponse) == 6, "HID status response has wrong size
  * This device sends periodic udates at a rate configured by the 3DS, and sends calibration data if
  * requested.
  */
-class ExtraHID final : public IRDevice {
+class ExtraHID final : public IRDevice, Core::Event {
 public:
     explicit ExtraHID(SendFunc send_func, Core::Timing& timing);
     ~ExtraHID();
@@ -53,14 +53,15 @@ public:
     void RequestInputDevicesReload();
 
 private:
-    void SendHIDStatus();
+    const std::string& Name() const override;
+    void Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) override;
     void HandleConfigureHIDPollingRequest(const std::vector<u8>& request);
     void HandleReadCalibrationDataRequest(const std::vector<u8>& request);
     void LoadInputDevices();
 
     Core::Timing& timing;
     u8 hid_period;
-    Core::TimingEventType* hid_polling_callback_id;
+    // Core::TimingEventType* hid_polling_callback_id;
     std::array<u8, 0x40> calibration_data;
     std::unique_ptr<Input::ButtonDevice> zl;
     std::unique_ptr<Input::ButtonDevice> zr;

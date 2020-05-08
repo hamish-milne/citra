@@ -33,6 +33,8 @@
 #include "core/hle/kernel/process.h"
 #include "core/hle/kernel/wait_object.h"
 
+class WaitTreeThread;
+
 namespace Kernel {
 
 using ObjectPtr = std::shared_ptr<WaitObject>;
@@ -96,6 +98,10 @@ public:
         return *process;
     }
 
+    const Kernel::Process& Process() const {
+        return *process;
+    }
+
     VAddr GetCommandBufferAddress() const {
         // Offset from the start of TLS at which the IPC command buffer begins.
         constexpr u32 command_header_offset = 0x80;
@@ -154,7 +160,7 @@ private:
 
     // Mutable
     std::vector<ObjectPtr> waiting_on{};
-    boost::container::flat_set<Kernel::Mutex*> held_mutexes{};
+    boost::container::flat_set<std::shared_ptr<Kernel::Mutex>> held_mutexes{};
     Status status = Status::Created;
     u32 nominal_priority = Priority::Default;
     std::optional<u32> real_priority{};
@@ -169,6 +175,7 @@ private:
     void SetStatus(Status status);
 
     friend class ThreadManager;
+    friend class ::WaitTreeThread;
 
     explicit Thread(KernelSystem& kernel, u32 core_id);
 
@@ -208,7 +215,12 @@ private:
 class ThreadManager {
 
 public:
-    explicit ThreadManager(u32 core_id, std::unique_ptr<ARM_Interface> cpu);
+    explicit ThreadManager(Core::Timing& root, u32 core_id, std::unique_ptr<ARM_Interface> cpu);
+    ~ThreadManager();
+
+    // Make moveable
+    ThreadManager(ThreadManager&&) = default;
+    ThreadManager& operator=(ThreadManager&&) = default;
 
     ResultCode WaitOne(ObjectPtr object, nanoseconds timeout);
     ResultCode WaitAny(std::vector<ObjectPtr> objects, nanoseconds timeout, s32* index);
@@ -256,15 +268,17 @@ public:
     }
 
 private:
+    // Constant
     u32 core_id;
-    KernelSystem& kernel;
     Core::Timing& root;
-    Kernel::Thread* thread;
     std::unique_ptr<ARM_Interface> cpu;
+
+    // Mutable
+    Kernel::Thread* thread;
     std::vector<Kernel::Thread*> threads;
-    Cycles cycles_remaining{0};
-    Cycles delay_cycles{0};
-    ::Ticks segment_end{0};
+    Cycles cycles_remaining;
+    Cycles delay_cycles;
+    ::Ticks segment_end;
 
     bool Reschedule();
     Ticks RunSegment(Ticks segment_length);
@@ -275,7 +289,6 @@ private:
     void EndBlock();
 
     bool AllThreadsIdle() const;
-    void RemoveThread(Kernel::Thread* thread);
 
     friend class Core::Timing;
     friend class Thread;

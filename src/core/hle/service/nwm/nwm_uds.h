@@ -43,6 +43,8 @@ const u8 DefaultNetworkChannel = 11;
 const double MillisecondsPerTU = 1.024;
 // Interval measured in TU, the default value is 100TU = 102.4ms
 const u16 DefaultBeaconInterval = 100;
+const Ticks BeaconIntervalTicks =
+    std::chrono::duration<double, std::milli>(MillisecondsPerTU * DefaultBeaconInterval);
 
 /// The maximum number of nodes that can exist in an UDS session.
 constexpr u32 UDSMaxNodes = 16;
@@ -430,7 +432,7 @@ private:
                           const u8* network_info_buffer, std::size_t network_info_size,
                           u8 connection_type, std::vector<u8> passphrase);
 
-    void BeaconBroadcastCallback(u64 userdata, s64 cycles_late);
+    // void BeaconBroadcastCallback(u64 userdata, s64 cycles_late);
 
     /**
      * Returns a list of received 802.11 beacon frames from the specified sender since the last
@@ -537,7 +539,8 @@ private:
     std::map<MacAddress, Node> node_map;
 
     // Event that will generate and send the 802.11 beacon frames.
-    Core::TimingEventType* beacon_broadcast_event;
+    class BeaconBroadcastCallback;
+    std::unique_ptr<BeaconBroadcastCallback> beacon_broadcast_event;
 
     // Callback identifier for the OnWifiPacketReceived event.
     Network::RoomMember::CallbackHandle<Network::WifiPacket> wifi_packet_received;

@@ -85,14 +85,14 @@ void SRV::EnableNotification(Kernel::HLERequestContext& ctx) {
     LOG_WARNING(Service_SRV, "(STUBBED) called");
 }
 
-class SRV::ThreadCallback : public Kernel::HLERequestContext::WakeupCallback {
+class SRV::ThreadCallback : public Kernel::IPCCallback {
 
 public:
     explicit ThreadCallback(Core::System& system_, std::string name_)
         : system(system_), name(name_) {}
 
-    void WakeUp(std::shared_ptr<Kernel::Thread> thread, Kernel::HLERequestContext& ctx,
-                Kernel::ThreadWakeupReason reason) {
+    void Continue(Kernel::Thread& thread, Kernel::HLERequestContext& ctx,
+                  Kernel::Thread::WakeupReason reason) override {
         LOG_ERROR(Service_SRV, "called service={} wakeup", name);
         auto client_port = system.ServiceManager().GetServicePort(name);
 
@@ -121,7 +121,7 @@ private:
 
     template <class Archive>
     void serialize(Archive& ar, const unsigned int) {
-        ar& boost::serialization::base_object<Kernel::HLERequestContext::WakeupCallback>(*this);
+        ar& boost::serialization::base_object<Kernel::IPCCallback>(*this);
         ar& name;
     }
     friend class boost::serialization::access;

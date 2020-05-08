@@ -114,6 +114,23 @@ std::shared_ptr<Thread> ThreadManager::CreateThread(
     return std::shared_ptr<Thread>(thread);
 }
 
+ResultVal<std::shared_ptr<Thread>> KernelSystem::CreateThread(
+    std::string name, VAddr entry_point, u32 priority, u32 arg, s32 processor_id, VAddr stack_top,
+    std::shared_ptr<Process> owner_process) {
+
+    if (processor_id > Thread::Processor::IdMax) {
+        LOG_ERROR(Kernel_SVC, "Invalid processor id: {}", processor_id);
+        return ERR_OUT_OF_RANGE_KERNEL;
+    }
+
+    // TODO(yuriks): Other checks, returning 0xD9001BEA
+
+    auto thread = GetThreadManager(processor_id)
+                      .CreateThread(*this, name, entry_point, priority, arg, stack_top,
+                                    std::move(owner_process));
+    return MakeResult<std::shared_ptr<Thread>>(std::move(thread));
+}
+
 class Thread::WakeupEvent : public Core::Event {
     Thread& parent;
 
@@ -144,7 +161,8 @@ Thread::~Thread() {
 }
 
 Ticks ThreadManager::RunSegment(::Ticks segment_length) {
-    auto segment_cycles = Cycles(segment_length, 1.0);
+    auto scale_factor = root.scale_factor;
+    auto segment_cycles = Cycles(segment_length, scale_factor);
     cycles_remaining = segment_cycles;
     Cycles defer_cycles{0};
     do {
@@ -163,7 +181,7 @@ Ticks ThreadManager::RunSegment(::Ticks segment_length) {
         //  * An event was scheduled while idle, and executing it didn't cause our core to continue
         //  * An event was scheduled while running
         //  * All threads have yielded and none are ready to run
-        auto time_to_event = Cycles(root.TimeToNextEvent(), 1.0);
+        auto time_to_event = Cycles(root.TimeToNextEvent(), scale_factor);
         if (CanCutSlice()) {
             // If we can cut the slice, we should do so at this point.
             auto new_cycles = std::min(time_to_event, cycles_remaining);
@@ -177,8 +195,13 @@ Ticks ThreadManager::RunSegment(::Ticks segment_length) {
         }
 
     } while (cycles_remaining > Cycles(0));
-    return segment_cycles.GetTicks(1.0);
+    return segment_cycles.GetTicks(scale_factor);
 }
+
+ThreadManager::ThreadManager(Core::Timing& root_, u32 core_id_, std::unique_ptr<ARM_Interface> cpu_)
+    : root(root_), core_id(core_id_), cpu(std::move(cpu_)) {}
+
+ThreadManager::~ThreadManager() = default;
 
 bool ThreadManager::Reschedule() {
 
@@ -221,8 +244,9 @@ void ThreadManager::EndBlock() {
     CPU().PrepareReschedule();
 }
 
-void ThreadManager::RemoveThread(Kernel::Thread* thread) {
-    // TODO:
+void Thread::SaveContext() {
+    ASSERT(status == Status::Running);
+    core.cpu->SaveContext(context);
 }
 
 ResultCode Thread::SyncOutput(ResultCode result, std::optional<u32> output) {
@@ -544,11 +568,11 @@ void Thread::OnAcquireMutex(Kernel::Mutex* mutex) {
     for (auto waiting_thread : mutex->GetWaitingThreads()) {
         waiting_thread->real_priority.reset();
     }
-    held_mutexes.insert(mutex);
+    held_mutexes.insert(SharedFrom(mutex));
 }
 
 void Thread::OnReleaseMutex(Kernel::Mutex* mutex) {
-    held_mutexes.erase(mutex);
+    held_mutexes.erase(SharedFrom(mutex));
     for (auto waiting_thread : mutex->GetWaitingThreads()) {
         waiting_thread->real_priority.reset();
     }

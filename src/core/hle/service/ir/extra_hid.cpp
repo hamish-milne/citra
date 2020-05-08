@@ -145,12 +145,12 @@ ExtraHID::ExtraHID(SendFunc send_func, Core::Timing& timing) : IRDevice(send_fun
         0x65,
     }};
 
-    hid_polling_callback_id =
-        timing.RegisterEvent("ExtraHID::SendHIDStatus", [this](u64, s64 cycles_late) {
-            SendHIDStatus();
-            this->timing.ScheduleEvent(msToCycles(hid_period) - cycles_late,
-                                       hid_polling_callback_id);
-        });
+    // hid_polling_callback_id =
+    //     timing.RegisterEvent("ExtraHID::SendHIDStatus", [this](u64, s64 cycles_late) {
+    //         SendHIDStatus();
+    //         this->timing.ScheduleEvent(msToCycles(hid_period) - cycles_late,
+    //                                    hid_polling_callback_id);
+    //     });
 }
 
 ExtraHID::~ExtraHID() {
@@ -160,7 +160,7 @@ ExtraHID::~ExtraHID() {
 void ExtraHID::OnConnect() {}
 
 void ExtraHID::OnDisconnect() {
-    timing.UnscheduleEvent(hid_polling_callback_id, 0);
+    timing.UnscheduleEvent(this);
 }
 
 void ExtraHID::HandleConfigureHIDPollingRequest(const std::vector<u8>& request) {
@@ -171,9 +171,9 @@ void ExtraHID::HandleConfigureHIDPollingRequest(const std::vector<u8>& request) 
     }
 
     // Change HID input polling interval
-    timing.UnscheduleEvent(hid_polling_callback_id, 0);
+    timing.UnscheduleEvent(this);
     hid_period = request[1];
-    timing.ScheduleEvent(msToCycles(hid_period), hid_polling_callback_id);
+    timing.ScheduleEvent(this, milliseconds(hid_period));
 }
 
 void ExtraHID::HandleReadCalibrationDataRequest(const std::vector<u8>& request_buf) {
@@ -227,7 +227,12 @@ void ExtraHID::OnReceive(const std::vector<u8>& data) {
     }
 }
 
-void ExtraHID::SendHIDStatus() {
+const std::string& ExtraHID::Name() const {
+    static const std::string name = "ExtraHID::SendHIDStatus";
+    return name;
+}
+
+void ExtraHID::Execute(Core::Timing& timing, u64 userdata, Ticks cycles_late) {
     if (is_device_reload_pending.exchange(false))
         LoadInputDevices();
 
@@ -254,6 +259,8 @@ void ExtraHID::SendHIDStatus() {
     std::vector<u8> response_buffer(sizeof(response));
     memcpy(response_buffer.data(), &response, sizeof(response));
     Send(response_buffer);
+
+    timing.ScheduleEvent(this, milliseconds(hid_period) - cycles_late);
 }
 
 void ExtraHID::RequestInputDevicesReload() {

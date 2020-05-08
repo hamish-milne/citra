@@ -74,13 +74,15 @@ private:
 
     void LoadInputDevices();
     void UnloadInputDevices();
-    void UpdateCallback(u64 userdata, s64 cycles_late);
+
+    void UpdateCallback(Ticks cycles_late);
 
     Core::System& system;
     std::shared_ptr<Kernel::Event> update_event;
     std::shared_ptr<Kernel::SharedMemory> shared_memory;
     u32 next_pad_index{0};
-    Core::TimingEventType* update_callback_id;
+    class UpdateCallbackEvent;
+    std::unique_ptr<UpdateCallbackEvent> update_callback;
     std::unique_ptr<Input::ButtonDevice> zl_button;
     std::unique_ptr<Input::ButtonDevice> zr_button;
     std::unique_ptr<Input::AnalogDevice> c_stick;
