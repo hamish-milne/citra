@@ -13,7 +13,7 @@ namespace InputCommon {
 
 class KeyButton final : public Input::ButtonDevice {
 public:
-    explicit KeyButton(std::atomic<bool>& _status) : status(_status) {}
+    explicit KeyButton(std::atomic<bool>& status_) : status(status_) {}
 
     ~KeyButton() override = default;
 
@@ -28,7 +28,7 @@ private:
 };
 
 struct KeyButtonPair {
-    explicit KeyButtonPair(int _key_code) : key_code(_key_code) {}
+    explicit KeyButtonPair(int key_code_) : key_code(key_code_) {}
     int key_code;
     std::atomic<bool> status{false};
 };
@@ -37,11 +37,13 @@ class KeyButtonList {
 public:
     KeyButtonPair& AddKeyButton(int key_code) {
         std::lock_guard guard{mutex};
-        for (KeyButtonPair& pair : list) {
-            if (pair.key_code == key_code)
-                return pair;
+        auto it = std::find_if(list.begin(), list.end(), [key_code](const KeyButtonPair& pair) {
+            return pair.key_code == key_code;
+        });
+        if (it == list.end()) {
+            return list.emplace_back(key_code);
         }
-        return list.emplace_back(key_code);
+        return *it;
     }
 
     void ChangeKeyStatus(int key_code, bool pressed) {
